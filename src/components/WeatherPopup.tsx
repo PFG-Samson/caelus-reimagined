@@ -23,7 +23,7 @@ interface WeatherPopupProps {
   onClose: () => void;
 }
 
-const OPENWEATHER_KEY = "659534d15f836bc0f7389edc9d7a1920";
+const OPENWEATHER_KEY = import.meta.env.VITE_OPENWEATHER_KEY;
 
 interface WeatherData {
   temp: number;
@@ -157,13 +157,13 @@ const WeatherPopup: React.FC<WeatherPopupProps> = ({ lat, lon, isOpen, onClose }
               {/* Secondary info */}
               <div className="grid grid-cols-2 gap-2 text-xs">
                 <div className="flex items-center gap-1">
-                  <Droplets size={14}/> Humidity: {weather.humidity}%
+                  <Droplets size={14} /> Humidity: {weather.humidity}%
                 </div>
                 <div className="flex items-center gap-1">
-                  <Wind size={14}/> Wind: {convertWindSpeed(weather.wind_speed, state.units.windspeed).toFixed(1)} {getWindSpeedUnit(state.units.windspeed)}
+                  <Wind size={14} /> Wind: {convertWindSpeed(weather.wind_speed, state.units.windspeed).toFixed(1)} {getWindSpeedUnit(state.units.windspeed)}
                 </div>
                 <div className="flex items-center gap-1">
-                  <Gauge size={14}/> Pressure: {convertPressure(weather.pressure, state.units.pressure).toFixed(1)} {getPressureUnit(state.units.pressure)}
+                  <Gauge size={14} /> Pressure: {convertPressure(weather.pressure, state.units.pressure).toFixed(1)} {getPressureUnit(state.units.pressure)}
                 </div>
                 <div>
                   Visibility: {convertDistance(weather.visibility, state.units.distance).toFixed(1)} {getDistanceUnit(state.units.distance)}

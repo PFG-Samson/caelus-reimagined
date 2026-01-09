@@ -27,3 +27,12 @@ dist-ssr
 .env.local
 .env.development
 .env.production
+.env.test
+.env*.local
+
+# Sensitive files
+*.pem
+*.key
+*.cert
+secrets/
+config/secrets.json
