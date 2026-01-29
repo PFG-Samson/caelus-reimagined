@@ -25,6 +25,7 @@ import {
   getPressureUnit,
   formatTime
 } from "@/lib/utils";
+import { airportService, type Airport } from "@/services/airportService";
 
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -41,6 +42,9 @@ interface WeatherMapProps {
   activeWeatherLayers: string[];
   currentDate: Date;
   onCoordinatesChange: (lat: number, lng: number) => void;
+  showAirports: boolean;
+  onAirportClick: (airport: Airport) => void;
+  onWeatherPanelOpen?: () => void;
 }
 
 export interface WeatherMapRef {
@@ -48,6 +52,7 @@ export interface WeatherMapRef {
   flyTo: (lat: number, lng: number, zoom?: number) => void;
   searchAndShowWeather: (lat: number, lng: number) => void;
   zoomToUserLocation: () => void;
+  closeWeatherPanel: () => void;
   flyToWorld: () => void;
   zoomIn: () => void;
   zoomOut: () => void;
@@ -59,7 +64,7 @@ const weatherCache = new Map<string, { timestamp: number; payload: any }>();
 const CACHE_TTL_MS = 1000 * 60 * 5;
 
 const WeatherMap = forwardRef<WeatherMapRef, WeatherMapProps>(
-  ({ activeBasemap, activeWeatherLayers, currentDate, onCoordinatesChange }, ref) => {
+  ({ activeBasemap, activeWeatherLayers, currentDate, onCoordinatesChange, showAirports, onAirportClick, onWeatherPanelOpen }, ref) => {
     const { state } = useSettings();
     const mapContainer = useRef<HTMLDivElement | null>(null);
     const map = useRef<L.Map | null>(null);
@@ -76,6 +81,7 @@ const WeatherMap = forwardRef<WeatherMapRef, WeatherMapProps>(
 
     const userMarker = useRef<L.Marker | null>(null);
     const locationMarker = useRef<L.Marker | null>(null);
+    const airportMarkers = useRef<L.LayerGroup | null>(null);
     const { toast } = useToast();
 
     const measuringRef = useRef(false);
@@ -225,6 +231,7 @@ const WeatherMap = forwardRef<WeatherMapRef, WeatherMapProps>(
         setWeatherError(null);
         setWeatherLoading(true);
         setWeatherPanelOpen(true);
+        onWeatherPanelOpen?.();
 
         const payload = await fetchWeather(lat, lng);
         setWeatherLoading(false);
@@ -268,6 +275,7 @@ const WeatherMap = forwardRef<WeatherMapRef, WeatherMapProps>(
         setWeatherError(null);
         setWeatherLoading(true);
         setWeatherPanelOpen(true);
+        onWeatherPanelOpen?.();
 
         const payload = await fetchWeather(lat, lng);
         setWeatherLoading(false);
@@ -295,8 +303,12 @@ const WeatherMap = forwardRef<WeatherMapRef, WeatherMapProps>(
         if (map.current) {
           map.current.zoomOut();
         }
+      },
+      closeWeatherPanel: () => {
+        setWeatherPanelOpen(false);
+        if (locationMarker.current) locationMarker.current.remove();
       }
-    }), [cancelMeasurement, toast, fetchWeather, geolocation]);
+    }), [cancelMeasurement, toast, fetchWeather, geolocation, onWeatherPanelOpen]);
 
 
 
@@ -453,6 +465,72 @@ const WeatherMap = forwardRef<WeatherMapRef, WeatherMapProps>(
       });
     }, [activeWeatherLayers, addOverlay, removeOverlay]);
 
+    // Handle Airports Layer
+    useEffect(() => {
+      if (!map.current || !mapReady) return;
+
+      if (showAirports) {
+        if (!airportMarkers.current) {
+          airportMarkers.current = L.layerGroup().addTo(map.current);
+        }
+
+        const loadAirports = async () => {
+          const airports = await airportService.getAirports();
+          if (!airportMarkers.current || !map.current) return;
+
+          airportMarkers.current.clearLayers();
+
+          const intlIcon = L.divIcon({
+            html: `<div class="bg-blue-600 p-1 rounded-full border border-white shadow-md"><svg viewBox="0 0 24 24" width="12" height="12" stroke="white" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M17.8 19.2L16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .4 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.2c.3.4.8.5 1.3.3l.5-.3c.4-.2.6-.6.5-1.1z"></path></svg></div>`,
+            className: 'airport-icon-intl',
+            iconSize: [20, 20],
+            iconAnchor: [10, 10]
+          });
+
+          const localIcon = L.divIcon({
+            html: `<div class="bg-slate-700 p-0.5 rounded-full border border-white/50 shadow-sm"><svg viewBox="0 0 24 24" width="10" height="10" stroke="white" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M17.8 19.2L16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .4 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.2c.3.4.8.5 1.3.3l.5-.3c.4-.2.6-.6.5-1.1z"></path></svg></div>`,
+            className: 'airport-icon-local',
+            iconSize: [16, 16],
+            iconAnchor: [8, 8]
+          });
+
+          const currentZoom = map.current.getZoom();
+          // Only show airports if zoom level is 6 or higher
+          if (currentZoom < 6) return;
+
+          airports.forEach(airport => {
+            const marker = L.marker([airport.lat, airport.lon], {
+              icon: airport.type === 'large_airport' ? intlIcon : localIcon,
+              title: airport.name
+            });
+
+            marker.on('click', (e) => {
+              L.DomEvent.stopPropagation(e);
+              onAirportClick(airport);
+            });
+
+            marker.addTo(airportMarkers.current!);
+          });
+        };
+
+        loadAirports();
+
+        // Listen for zoom changes to re-evaluate airport visibility
+        const onZoomEnd = () => loadAirports();
+        map.current.on('zoomend', onZoomEnd);
+
+        return () => {
+          map.current?.off('zoomend', onZoomEnd);
+        };
+      } else {
+        if (airportMarkers.current) {
+          airportMarkers.current.clearLayers();
+          airportMarkers.current.remove();
+          airportMarkers.current = null;
+        }
+      }
+    }, [showAirports, mapReady, onAirportClick]);
+
     // Initialize the map and events (runs once on mount)
     useEffect(() => {
       if (!mapContainer.current || map.current) return;
@@ -514,6 +592,7 @@ const WeatherMap = forwardRef<WeatherMapRef, WeatherMapProps>(
         setWeatherSummary(null);
         setWeatherLoading(true);
         setWeatherPanelOpen(true);
+        onWeatherPanelOpen?.();
 
         const payload = await fetchWeather(lat, lon);
         setWeatherLoading(false);

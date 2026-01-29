@@ -15,6 +15,7 @@ import {
   getPressureUnit,
   formatTime
 } from '@/lib/utils';
+import { airportService, type Airport } from '@/services/airportService';
 
 // Cesium Ion access token
 Cesium.Ion.defaultAccessToken = import.meta.env.VITE_CESIUM_TOKEN;
@@ -29,6 +30,9 @@ interface Globe3DProps {
   activeWeatherLayers: string[];
   currentDate: Date;
   onCoordinatesChange: (lat: number, lng: number) => void;
+  showAirports: boolean;
+  onAirportClick: (airport: Airport) => void;
+  onWeatherPanelOpen?: () => void;
 }
 
 export interface Globe3DRef {
@@ -37,15 +41,17 @@ export interface Globe3DRef {
   zoomIn: () => void;
   zoomOut: () => void;
   zoomToUserLocation: () => void;
+  closeWeatherPanel: () => void;
 }
 
 const Globe3D = forwardRef<Globe3DRef, Globe3DProps>(
-  ({ activeBasemap, activeWeatherLayers, currentDate, onCoordinatesChange }, ref) => {
+  ({ activeBasemap, activeWeatherLayers, currentDate, onCoordinatesChange, showAirports, onAirportClick, onWeatherPanelOpen }, ref) => {
     const { state } = useSettings();
     const cesiumContainer = useRef<HTMLDivElement>(null);
     const viewer = useRef<Cesium.Viewer | null>(null);
     const weatherImageryLayers = useRef<Map<string, Cesium.ImageryLayer>>(new Map());
     const locationMarker = useRef<Cesium.Entity | null>(null);
+    const airportEntities = useRef<Cesium.Entity[]>([]);
 
     const [weatherPanelOpen, setWeatherPanelOpen] = useState(false);
     const [weatherPayload, setWeatherPayload] = useState<any | null>(null);
@@ -124,6 +130,7 @@ const Globe3D = forwardRef<Globe3DRef, Globe3DProps>(
           setWeatherSummary(null);
           setWeatherLoading(true);
           setWeatherPanelOpen(true);
+          onWeatherPanelOpen?.();
 
           const payload = await fetchWeather(lat, lng);
           setWeatherLoading(false);
@@ -492,6 +499,80 @@ const Globe3D = forwardRef<Globe3DRef, Globe3DProps>(
       addBasemap();
     }, [activeBasemap, activeWeatherLayers, currentDate]);
 
+    // Handle Airports Layer in 3D
+    useEffect(() => {
+      if (!viewer.current) return;
+
+      // Remove existing airport entities
+      airportEntities.current.forEach(entity => viewer.current?.entities.remove(entity));
+      airportEntities.current = [];
+
+      if (showAirports) {
+        const loadAirports = async () => {
+          const airports = await airportService.getAirports();
+          if (!viewer.current) return;
+
+          // Define SVG icons as base64 or URL
+          // For Cesium, it's easier to use a canvas or a pre-defined image URL.
+          // We'll use a simple circle/point with a label for now, or a custom canvas icon.
+
+          airports.forEach(airport => {
+            const entity = viewer.current!.entities.add({
+              position: Cesium.Cartesian3.fromDegrees(airport.lon, airport.lat, airport.elev || 0),
+              billboard: {
+                // Use a default airport icon or a colored point
+                image: airport.type === 'large_airport'
+                  ? 'https://raw.githubusercontent.com/google/material-design-icons/master/src/maps/flight/materialicons/24px.svg'
+                  : 'https://raw.githubusercontent.com/google/material-design-icons/master/src/maps/local_airport/materialicons/18px.svg',
+                width: airport.type === 'large_airport' ? 16 : 12,
+                height: airport.type === 'large_airport' ? 16 : 12,
+                color: airport.type === 'large_airport' ? Cesium.Color.DODGERBLUE : Cesium.Color.SLATEGRAY,
+                heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND,
+                verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+                disableDepthTestDistance: Number.POSITIVE_INFINITY,
+                distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 5000000), // Hide if further than 5000km
+              },
+              label: {
+                text: airport.name,
+                font: '9px sans-serif',
+                fillColor: Cesium.Color.WHITE,
+                outlineColor: Cesium.Color.BLACK,
+                outlineWidth: 2,
+                style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+                verticalOrigin: Cesium.VerticalOrigin.TOP,
+                pixelOffset: new Cesium.Cartesian2(0, 5),
+                distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 1000000), // Only show labels when close (1000km)
+              },
+              properties: {
+                airportData: airport
+              }
+            });
+            airportEntities.current.push(entity);
+          });
+        };
+
+        loadAirports();
+      }
+    }, [showAirports]);
+
+    // Handle Airport Clicks in 3D
+    useEffect(() => {
+      if (!viewer.current) return;
+
+      const handler = new Cesium.ScreenSpaceEventHandler(viewer.current.scene.canvas);
+      handler.setInputAction((click: any) => {
+        const pickedObject = viewer.current!.scene.pick(click.position);
+        if (Cesium.defined(pickedObject) && pickedObject.id && pickedObject.id.properties?.airportData) {
+          const airport = pickedObject.id.properties.airportData.getValue();
+          onAirportClick(airport);
+        }
+      }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
+      return () => {
+        handler.destroy();
+      };
+    }, [onAirportClick]);
+
     // Expose methods via ref
     useImperativeHandle(ref, () => ({
       flyTo: (lat: number, lng: number, zoom = 10) => {
@@ -542,6 +623,7 @@ const Globe3D = forwardRef<Globe3DRef, Globe3DProps>(
         setWeatherSummary(null);
         setWeatherLoading(true);
         setWeatherPanelOpen(true);
+        onWeatherPanelOpen?.();
 
         const payload = await fetchWeather(lat, lng);
         setWeatherLoading(false);
@@ -620,6 +702,7 @@ const Globe3D = forwardRef<Globe3DRef, Globe3DProps>(
               setWeatherSummary(null);
               setWeatherLoading(true);
               setWeatherPanelOpen(true);
+              onWeatherPanelOpen?.();
 
               const payload = await fetchWeather(lat, lng);
               setWeatherLoading(false);
@@ -658,7 +741,14 @@ const Globe3D = forwardRef<Globe3DRef, Globe3DProps>(
           });
         }
       },
-    }), []);
+      closeWeatherPanel: () => {
+        setWeatherPanelOpen(false);
+        if (locationMarker.current && viewer.current) {
+          viewer.current.entities.remove(locationMarker.current);
+          locationMarker.current = null;
+        }
+      }
+    }), [onWeatherPanelOpen]);
 
     return (
       <div className="relative w-full h-full">

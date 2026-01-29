@@ -9,6 +9,8 @@ import MapControls from '@/components/MapControls';
 import SearchModal from '@/components/SearchModal';
 import SettingsModal from '@/components/SettingsModal';
 import html2canvas from "html2canvas";
+import AirportPopup from '@/components/AirportPopup';
+import { airportService, type Airport } from '@/services/airportService';
 
 import { useToast } from '@/hooks/use-toast';
 import { useSettings } from '@/context/SettingsContext';
@@ -24,6 +26,8 @@ const Index = () => {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [is3DView, setIs3DView] = useState(false);
+  const [showAirports, setShowAirports] = useState(false);
+  const [selectedAirport, setSelectedAirport] = useState<Airport | null>(null);
 
   // ✅ Typed refs for both 2D and 3D views
   const mapRef = useRef<WeatherMapRef>(null);
@@ -211,6 +215,21 @@ const Index = () => {
     });
   };
 
+  const handleAirportClick = useCallback((airport: Airport) => {
+    // Close weather panel when airport is clicked
+    if (is3DView && globeRef.current) {
+      globeRef.current.closeWeatherPanel();
+    } else if (mapRef.current) {
+      mapRef.current.closeWeatherPanel();
+    }
+    setSelectedAirport(airport);
+  }, [is3DView]);
+
+  const handleWeatherPanelOpen = useCallback(() => {
+    // Close airport popup when weather panel opens
+    setSelectedAirport(null);
+  }, []);
+
   return (
     <div className="relative w-full h-screen overflow-hidden bg-background">
       {/* Conditionally render 2D Map or 3D Globe */}
@@ -221,6 +240,9 @@ const Index = () => {
           activeWeatherLayers={activeWeatherLayers}
           currentDate={currentDate}
           onCoordinatesChange={handleCoordinatesChange}
+          showAirports={showAirports}
+          onAirportClick={handleAirportClick}
+          onWeatherPanelOpen={handleWeatherPanelOpen}
         />
       ) : (
         <WeatherMap
@@ -229,6 +251,9 @@ const Index = () => {
           activeWeatherLayers={activeWeatherLayers}
           currentDate={currentDate}
           onCoordinatesChange={handleCoordinatesChange}
+          showAirports={showAirports}
+          onAirportClick={handleAirportClick}
+          onWeatherPanelOpen={handleWeatherPanelOpen}
         />
       )}
 
@@ -272,7 +297,17 @@ const Index = () => {
         onOverlayToggle={handleOverlayToggle}
         is3DView={is3DView}
         onToggle3D={handleToggle3D}
+        showAirports={showAirports}
+        onToggleAirports={() => setShowAirports(!showAirports)}
       />
+
+      {selectedAirport && (
+        <AirportPopup
+          airport={selectedAirport}
+          isOpen={!!selectedAirport}
+          onClose={() => setSelectedAirport(null)}
+        />
+      )}
 
       <SearchModal
         open={searchOpen}

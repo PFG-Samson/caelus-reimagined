@@ -1,5 +1,5 @@
 import React from 'react';
-import { ZoomIn, ZoomOut, Eye, EyeOff, Wind, Gauge, MapPin as LocationIcon, Moon, Globe2, Map } from 'lucide-react';
+import { ZoomIn, ZoomOut, Eye, EyeOff, Wind, Gauge, MapPin as LocationIcon, Moon, Globe2, Map, Plane } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface MapControlsProps {
@@ -15,6 +15,8 @@ interface MapControlsProps {
   onOverlayToggle: (overlay: keyof MapControlsProps['overlays']) => void;
   is3DView: boolean;
   onToggle3D: () => void;
+  showAirports: boolean;
+  onToggleAirports: () => void;
 }
 
 const MapControls: React.FC<MapControlsProps> = ({
@@ -23,14 +25,16 @@ const MapControls: React.FC<MapControlsProps> = ({
   overlays,
   onOverlayToggle,
   is3DView,
-  onToggle3D
+  onToggle3D,
+  showAirports,
+  onToggleAirports
 }) => {
   const overlayConfigs = [
-    // { key: 'pressureIsolines' as const, icon: Gauge, label: 'Pressure Lines', color: 'text-weather-pressure' },
-    // { key: 'windAnimation' as const, icon: Wind, label: 'Wind Animation', color: 'text-weather-wind' },
-    // { key: 'locationNames' as const, icon: LocationIcon, label: 'Location Names', color: 'text-muted-foreground' },
-    // { key: 'forecastValues' as const, icon: Eye, label: 'Forecast Values', color: 'text-muted-foreground' },
-    // { key: 'nightBoundary' as const, icon: Moon, label: 'Night Boundary', color: 'text-muted-foreground' }
+    { key: 'pressureIsolines' as const, icon: Gauge, label: 'Pressure Lines', color: 'text-weather-pressure' },
+    { key: 'windAnimation' as const, icon: Wind, label: 'Wind Animation', color: 'text-weather-wind' },
+    { key: 'locationNames' as const, icon: LocationIcon, label: 'Location Names', color: 'text-muted-foreground' },
+    { key: 'forecastValues' as const, icon: Eye, label: 'Forecast Values', color: 'text-muted-foreground' },
+    { key: 'nightBoundary' as const, icon: Moon, label: 'Night Boundary', color: 'text-muted-foreground' }
   ];
 
   return (
@@ -40,7 +44,7 @@ const MapControls: React.FC<MapControlsProps> = ({
         {overlayConfigs.map((config) => {
           const Icon = config.icon;
           const isActive = overlays[config.key];
-          
+
           return (
             <Button
               key={config.key}
@@ -56,8 +60,18 @@ const MapControls: React.FC<MapControlsProps> = ({
         })}
       </div>
 
-      {/* 2D/3D Toggle */}
+      {/* 2D/3D Toggle and Airports Toggle */}
       <div className="flex flex-col gap-1 pointer-events-auto mt-2">
+        <Button
+          variant="secondary"
+          size="sm"
+          className={`map-control ${showAirports ? 'map-control-active' : ''}`}
+          onClick={onToggleAirports}
+          title={showAirports ? "Hide Airports" : "Show Airports"}
+        >
+          <Plane className={`h-4 w-4 ${showAirports ? 'text-blue-500' : ''}`} />
+        </Button>
+
         <Button
           variant="secondary"
           size="sm"
@@ -80,7 +94,7 @@ const MapControls: React.FC<MapControlsProps> = ({
         >
           <ZoomIn className="h-4 w-4" />
         </Button>
-        
+
         <Button
           variant="secondary"
           size="sm"
