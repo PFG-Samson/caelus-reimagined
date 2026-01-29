@@ -63,7 +63,7 @@ const WeatherMap = forwardRef<WeatherMapRef, WeatherMapProps>(
     const { state } = useSettings();
     const mapContainer = useRef<HTMLDivElement | null>(null);
     const map = useRef<L.Map | null>(null);
-    const mapReady = useRef<boolean>(false);
+    const [mapReady, setMapReady] = useState(false);
 
     // Continuous GPS location tracking
     const geolocation = useGeolocation();
@@ -433,7 +433,7 @@ const WeatherMap = forwardRef<WeatherMapRef, WeatherMapProps>(
 
     // Sync overlays when activeWeatherLayers change
     useEffect(() => {
-      if (!map.current || !mapReady.current) return;
+      if (!map.current || !mapReady) return;
 
       // compute desired set
       const desired = new Set(activeWeatherLayers);
@@ -466,48 +466,15 @@ const WeatherMap = forwardRef<WeatherMapRef, WeatherMapProps>(
         attributionControl: false,
       });
 
-      // Basemap definitions (same as before)
-      const basemaps: { [k: string]: L.Layer } = {
-        openstreetmap: L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-          attribution: "© OpenStreetMap contributors",
-          maxZoom: 19,
-        }),
-        esri: L.layerGroup([
-          L.tileLayer(
-            "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-            { attribution: "© Esri" }
-          ),
-          L.tileLayer(
-            "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
-            { attribution: "© Esri (labels)", pane: "overlayPane" }
-          ),
-        ]),
-        modis: L.tileLayer(gibUrl("MODIS_Terra_CorrectedReflectance_TrueColor", dateStr), {
-          attribution: "NASA GIBS | MODIS",
-          maxZoom: 9,
-          tileSize: 256,
-        }),
-        viirs: L.tileLayer(gibUrl("VIIRS_SNPP_CorrectedReflectance_TrueColor", dateStr), {
-          attribution: "NASA GIBS | VIIRS",
-          maxZoom: 9,
-          tileSize: 256,
-        }),
-      };
-
       // default basemap
-      (basemaps[activeBasemap] || basemaps.openstreetmap).addTo(map.current);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: "© OpenStreetMap contributors",
+        maxZoom: 19,
+      }).addTo(map.current);
 
-      // Mark map as ready after a short delay to ensure tiles are loading
+      // Mark map as ready after a short delay
       setTimeout(() => {
-        mapReady.current = true;
-        // Trigger initial overlay load by forcing a re-check
-        if (activeWeatherLayers.length > 0) {
-          activeWeatherLayers.forEach(layerId => {
-            if (!activeOverlayIds.current.has(layerId)) {
-              addOverlay(layerId);
-            }
-          });
-        }
+        setMapReady(true);
       }, 100);
 
       // wire up coordinate change
@@ -589,10 +556,10 @@ const WeatherMap = forwardRef<WeatherMapRef, WeatherMapProps>(
         if (map.current) {
           map.current.remove();
           map.current = null;
-          mapReady.current = false;
+          setMapReady(false);
         }
       };
-    }, [cancelMeasurement, fetchWeather, onCoordinatesChange, activeBasemap, dateStr, addOverlay, activeWeatherLayers]);
+    }, []); // Empty dependencies ensure it only runs once
 
     // When activeBasemap or today change, re-add correct basemap and ensure overlays stay
     useEffect(() => {
@@ -651,6 +618,11 @@ const WeatherMap = forwardRef<WeatherMapRef, WeatherMapProps>(
 
 
       (basemaps[activeBasemap] || basemaps.openstreetmap).addTo(map.current);
+
+      // Refresh active weather layers on top of new basemap
+      const currentActive = [...activeWeatherLayers];
+      activeOverlayIds.current.clear();
+      currentActive.forEach(id => addOverlay(id));
 
       // Recreate or refresh overlay tile layers if any rely on `dateStr` (GIBS date)
       // For overlays that have GIBS urls we need to recreate them when `dateStr` changes

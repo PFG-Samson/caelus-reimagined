@@ -12,17 +12,18 @@ interface HeaderProps {
   onShareClick?: () => void;
   onLocationClick?: () => void;
   onMeasureClick?: () => void;
-  
+  onSearchSubmit?: (query: string) => void;
 }
 
 const Header: React.FC<HeaderProps> = ({
-  onSearchClick = () => {},
-  onSettingsClick = () => {},
-  onAboutClick = () => {},
-  onShareClick = () => {},
-  onLocationClick = () => {},
-  onMeasureClick = () => {},
-  onWorldViewClick = () => {},
+  onSearchClick = () => { },
+  onSettingsClick = () => { },
+  onAboutClick = () => { },
+  onShareClick = () => { },
+  onLocationClick = () => { },
+  onMeasureClick = () => { },
+  onWorldViewClick = () => { },
+  onSearchSubmit = () => { },
 }) => {
   return (
     <header className="absolute top-1 left-4 right-4 z-50 flex items-center justify-between pointer-events-none">
@@ -47,7 +48,7 @@ const Header: React.FC<HeaderProps> = ({
         >
           <MapPin className="h-4 w-4" />
         </Button>
-        
+
         <Button
           variant="secondary"
           size="sm"

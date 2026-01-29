@@ -17,7 +17,7 @@ const Index = () => {
   const { state } = useSettings();
 
   // Map state
-  const [activeBasemap, setActiveBasemap] = useState('modis');
+  const [activeBasemap, setActiveBasemap] = useState('esri');
   const [activeWeatherLayers, setActiveWeatherLayers] = useState<string[]>(['temperature']);
   const [coordinates, setCoordinates] = useState({ lat: 20, lng: 0 });
   const [searchOpen, setSearchOpen] = useState(false);
@@ -217,6 +217,7 @@ const Index = () => {
       {is3DView ? (
         <Globe3D
           ref={globeRef}
+          activeBasemap={activeBasemap}
           activeWeatherLayers={activeWeatherLayers}
           currentDate={currentDate}
           onCoordinatesChange={handleCoordinatesChange}

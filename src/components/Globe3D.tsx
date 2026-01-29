@@ -25,6 +25,7 @@ const weatherCache = new Map<string, { timestamp: number; payload: any }>();
 const CACHE_TTL_MS = 1000 * 60 * 5;
 
 interface Globe3DProps {
+  activeBasemap: string;
   activeWeatherLayers: string[];
   currentDate: Date;
   onCoordinatesChange: (lat: number, lng: number) => void;
@@ -39,7 +40,7 @@ export interface Globe3DRef {
 }
 
 const Globe3D = forwardRef<Globe3DRef, Globe3DProps>(
-  ({ activeWeatherLayers, currentDate, onCoordinatesChange }, ref) => {
+  ({ activeBasemap, activeWeatherLayers, currentDate, onCoordinatesChange }, ref) => {
     const { state } = useSettings();
     const cesiumContainer = useRef<HTMLDivElement>(null);
     const viewer = useRef<Cesium.Viewer | null>(null);
@@ -74,16 +75,8 @@ const Globe3D = forwardRef<Globe3DRef, Globe3DProps>(
       // Enable lighting for realistic globe
       viewer.current.scene.globe.enableLighting = true;
 
-      // Add labels overlay using OpenStreetMap (includes city and place names)
-      try {
-        const osmLabelsProvider = new Cesium.OpenStreetMapImageryProvider({
-          url: 'https://tile.openstreetmap.org/',
-        });
-        const labelsLayer = viewer.current.imageryLayers.addImageryProvider(osmLabelsProvider);
-        labelsLayer.alpha = 0.5; // Make it semi-transparent to blend with base layer
-      } catch (error) {
-        console.warn('Could not load labels overlay:', error);
-      }
+      // 🏙️ Initial Labels Overlay (Optional/Static)
+      // Note: We handle dynamic labels in the activeBasemap effect
 
       // Track mouse movement for coordinates
       const handler = new Cesium.ScreenSpaceEventHandler(viewer.current.scene.canvas);
@@ -429,44 +422,75 @@ const Globe3D = forwardRef<Globe3DRef, Globe3DProps>(
       );
     };
 
-    // Handle weather layer changes
+    // Handle basemap and weather layer changes
     useEffect(() => {
       if (!viewer.current) return;
 
-      const desiredLayers = new Set(activeWeatherLayers);
-      const currentLayers = new Set(weatherImageryLayers.current.keys());
+      // Clear existing imagery layers (except possibly the bottom one)
+      // but simpler to clear all and re-add
+      viewer.current.imageryLayers.removeAll();
 
-      // Remove layers that are no longer active
-      currentLayers.forEach((layerId) => {
-        if (!desiredLayers.has(layerId)) {
-          const layer = weatherImageryLayers.current.get(layerId);
-          if (layer) {
-            viewer.current!.imageryLayers.remove(layer);
-            weatherImageryLayers.current.delete(layerId);
+      const dateStr = currentDate.toISOString().split("T")[0];
+
+      // 🌍 BaseMap Definitions for Cesium
+      const addBasemap = async () => {
+        try {
+          let baseProvider;
+          let labelProvider;
+
+          switch (activeBasemap) {
+            case 'esri':
+              baseProvider = await (Cesium.ArcGisMapServerImageryProvider as any).fromUrl(
+                'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer'
+              );
+              labelProvider = await (Cesium.ArcGisMapServerImageryProvider as any).fromUrl(
+                'https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer'
+              );
+              break;
+            case 'modis':
+              baseProvider = new (Cesium.UrlTemplateImageryProvider as any)({
+                url: gibUrl("MODIS_Terra_CorrectedReflectance_TrueColor", dateStr),
+                credit: 'NASA GIBS | MODIS',
+                maximumLevel: 9,
+              });
+              break;
+            case 'viirs':
+              baseProvider = new (Cesium.UrlTemplateImageryProvider as any)({
+                url: gibUrl("VIIRS_SNPP_CorrectedReflectance_TrueColor", dateStr),
+                credit: 'NASA GIBS | VIIRS',
+                maximumLevel: 9,
+              });
+              break;
+            default: // openstreetmap
+              baseProvider = new (Cesium.OpenStreetMapImageryProvider as any)({
+                url: 'https://tile.openstreetmap.org/'
+              });
+              break;
           }
-        }
-      });
 
-      // Add new layers
-      desiredLayers.forEach((layerId) => {
-        if (!currentLayers.has(layerId)) {
-          const tileUrl = getWeatherTileUrl(layerId);
-          if (tileUrl) {
-            try {
-              const provider = new Cesium.UrlTemplateImageryProvider({
+          if (baseProvider) viewer.current!.imageryLayers.addImageryProvider(baseProvider);
+          if (labelProvider) viewer.current!.imageryLayers.addImageryProvider(labelProvider);
+
+          // Re-add weather layers on top
+          for (const layerId of activeWeatherLayers) {
+            const tileUrl = getWeatherTileUrl(layerId);
+            if (tileUrl) {
+              const provider = new (Cesium.UrlTemplateImageryProvider as any)({
                 url: tileUrl,
                 maximumLevel: 18,
               });
               const imageryLayer = viewer.current!.imageryLayers.addImageryProvider(provider);
-              imageryLayer.alpha = 0.7; // Set transparency
+              imageryLayer.alpha = 0.7;
               weatherImageryLayers.current.set(layerId, imageryLayer);
-            } catch (error) {
-              console.error(`Failed to add weather layer ${layerId}:`, error);
             }
           }
+        } catch (error) {
+          console.error('Error switching basemaps in 3D:', error);
         }
-      });
-    }, [activeWeatherLayers, currentDate]);
+      };
+
+      addBasemap();
+    }, [activeBasemap, activeWeatherLayers, currentDate]);
 
     // Expose methods via ref
     useImperativeHandle(ref, () => ({

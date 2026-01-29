@@ -109,16 +109,18 @@ const LayerSelector: React.FC<LayerSelectorProps> = ({
 
   // ────────────────────────────────
   // 🔁 WEATHER LAYER TOGGLE HANDLER
-  // ────────────────────────────────
+  // 🔁 WEATHER LAYER TOGGLE HANDLER (Ensures smooth single-selection)
   const handleWeatherClick = (layerId: string) => {
+    // If clicking an already active layer, toggle it off
     if (activeWeatherLayers.includes(layerId)) {
       onWeatherLayerToggle(layerId);
-    } else {
-      activeWeatherLayers.forEach(l => {
-        if (l !== layerId) onWeatherLayerToggle(l);
-      });
-      onWeatherLayerToggle(layerId);
+      return;
     }
+
+    // Otherwise, clear current selections and activate the new one
+    // This provides a smooth "radio button" like behavior
+    activeWeatherLayers.forEach(l => onWeatherLayerToggle(l));
+    onWeatherLayerToggle(layerId);
   };
 
   // ────────────────────────────────
@@ -171,7 +173,7 @@ const LayerSelector: React.FC<LayerSelectorProps> = ({
               size="sm"
               variant={isActive ? 'default' : 'secondary'}
               onClick={() => handleWeatherClick(layer.id)}
-              className={`flex items-center justify-start gap-2 w-full text-sm py-1 h-8 transition-all ${isActive ? 'ring-2 ring-primary/40 bg-primary/10 text-primary' : ''
+              className={`flex items-center justify-start gap-2 w-full text-sm py-1 h-8 transition-all active:scale-95 hover:brightness-110 ${isActive ? 'ring-2 ring-primary/40 bg-primary/10 text-primary' : ''
                 }`}
             >
               <Icon className={`h-3.5 w-3.5 ${layer.color}`} />
