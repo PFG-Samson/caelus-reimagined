@@ -29,7 +29,7 @@ class OpenAIProvider implements AIProvider {
   private client: OpenAI | null = null;
 
   constructor() {
-    const apiKey = import.meta.env.OPENAI_API_KEY;
+    const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
     if (apiKey) {
       this.client = new OpenAI({
         apiKey,
@@ -90,7 +90,7 @@ class HuggingFaceProvider implements AIProvider {
   private endpoint: string;
 
   constructor() {
-    this.apiKey = import.meta.env.HF_TOKEN;
+    this.apiKey = import.meta.env.VITE_HF_TOKEN;
     // Using a capable model for text generation
     this.endpoint = import.meta.env.VITE_HUGGINGFACE_MODEL || "facebook/blenderbot-400M-distill";
   }
