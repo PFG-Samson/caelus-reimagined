@@ -127,17 +127,19 @@ const LayerSelector: React.FC<LayerSelectorProps> = ({
   // 🌍 RENDER
   // ────────────────────────────────
   return (
-    <div className="absolute top-20 left-4 z-40 w-30 space-y-3 pointer-events-none">
+    <div className="absolute top-20 left-4 z-40 space-y-3 pointer-events-none group">
       {/* Basemap Selector Dropdown */}
       <div className="weather-panel pointer-events-auto">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="secondary" className="layer-button w-full justify-between">
-              <div className="flex items-center gap-2">
-                <ActiveBasemapIcon className="h-4 w-4" />
-                <span>Map Imagery</span>
+            <Button variant="secondary" className="layer-button w-fit px-3 justify-between group-hover:w-48 transition-all duration-300">
+              <div className="flex items-center gap-2 overflow-hidden">
+                <ActiveBasemapIcon className="h-4 w-4 shrink-0" />
+                <span className="w-0 opacity-0 group-hover:w-auto group-hover:opacity-100 transition-all duration-300 whitespace-nowrap overflow-hidden">
+                  Map Imagery
+                </span>
               </div>
-              <ChevronDown className="h-4 w-4" />
+              <ChevronDown className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300 ml-1" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-48 weather-panel">
@@ -162,7 +164,7 @@ const LayerSelector: React.FC<LayerSelectorProps> = ({
       </div>
 
       {/* Weather Layer Buttons */}
-      <div className="weather-panel pointer-events-auto flex flex-col gap-1 p-2 rounded-md bg-background/60 backdrop-blur-md">
+      <div className="weather-panel pointer-events-auto flex flex-col gap-1 p-1.5 rounded-md bg-background/60 backdrop-blur-md w-fit group-hover:w-48 transition-all duration-300">
         {weatherLayers.map((layer) => {
           const Icon = layer.icon;
           const isActive = activeWeatherLayers.includes(layer.id);
@@ -173,11 +175,13 @@ const LayerSelector: React.FC<LayerSelectorProps> = ({
               size="sm"
               variant={isActive ? 'default' : 'secondary'}
               onClick={() => handleWeatherClick(layer.id)}
-              className={`flex items-center justify-start gap-2 w-full text-sm py-1 h-8 transition-all active:scale-95 hover:brightness-110 ${isActive ? 'ring-2 ring-primary/40 bg-primary/10 text-primary' : ''
+              className={`flex items-center justify-start gap-2 w-full text-sm py-1 px-3 h-9 transition-all active:scale-95 hover:brightness-110 ${isActive ? 'ring-2 ring-primary/40 bg-primary/10 text-primary' : ''
                 }`}
             >
-              <Icon className={`h-3.5 w-3.5 ${layer.color}`} />
-              <span>{layer.name}</span>
+              <Icon className={`h-4 w-4 shrink-0 ${layer.color}`} />
+              <span className="w-0 opacity-0 group-hover:w-auto group-hover:opacity-100 transition-all duration-300 whitespace-nowrap overflow-hidden">
+                {layer.name}
+              </span>
             </Button>
           );
         })}

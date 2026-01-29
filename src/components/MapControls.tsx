@@ -38,9 +38,9 @@ const MapControls: React.FC<MapControlsProps> = ({
   ];
 
   return (
-    <div className="absolute bottom-4 right-4 z-40 flex flex-col gap-2 pointer-events-none">
+    <div className="absolute bottom-4 right-4 z-40 flex flex-col gap-2 pointer-events-none items-end group">
       {/* Overlay Toggles */}
-      <div className="flex flex-col gap-1 pointer-events-auto">
+      <div className="flex flex-col gap-1 pointer-events-auto items-end">
         {overlayConfigs.map((config) => {
           const Icon = config.icon;
           const isActive = overlays[config.key];
@@ -50,11 +50,14 @@ const MapControls: React.FC<MapControlsProps> = ({
               key={config.key}
               variant="secondary"
               size="sm"
-              className={`map-control ${isActive ? 'map-control-active' : ''}`}
+              className={`map-control w-fit px-3 flex items-center gap-2 group-hover:w-48 transition-all duration-300 ${isActive ? 'map-control-active' : ''}`}
               onClick={() => onOverlayToggle(config.key)}
               title={config.label}
             >
-              <Icon className={`h-4 w-4 ${config.color}`} />
+              <Icon className={`h-4 w-4 shrink-0 ${config.color}`} />
+              <span className="w-0 opacity-0 group-hover:w-auto group-hover:opacity-100 transition-all duration-300 whitespace-nowrap overflow-hidden">
+                {config.label}
+              </span>
             </Button>
           );
         })}
@@ -65,21 +68,27 @@ const MapControls: React.FC<MapControlsProps> = ({
         <Button
           variant="secondary"
           size="sm"
-          className={`map-control ${showAirports ? 'map-control-active' : ''}`}
+          className={`map-control w-fit px-3 flex items-center gap-2 group-hover:w-48 transition-all duration-300 ${showAirports ? 'map-control-active' : ''}`}
           onClick={onToggleAirports}
           title={showAirports ? "Hide Airports" : "Show Airports"}
         >
-          <Plane className={`h-4 w-4 ${showAirports ? 'text-blue-500' : ''}`} />
+          <Plane className={`h-4 w-4 shrink-0 ${showAirports ? 'text-blue-500' : ''}`} />
+          <span className="w-0 opacity-0 group-hover:w-auto group-hover:opacity-100 transition-all duration-300 whitespace-nowrap overflow-hidden">
+            {showAirports ? "Hide Airports" : "Show Airports"}
+          </span>
         </Button>
 
         <Button
           variant="secondary"
           size="sm"
-          className={`map-control ${is3DView ? 'map-control-active' : ''}`}
+          className={`map-control w-fit px-3 flex items-center gap-2 group-hover:w-48 transition-all duration-300 ${is3DView ? 'map-control-active' : ''}`}
           onClick={onToggle3D}
           title={is3DView ? "Switch to 2D Map" : "Switch to 3D Globe"}
         >
-          {is3DView ? <Map className="h-4 w-4" /> : <Globe2 className="h-4 w-4" />}
+          {is3DView ? <Map className="h-4 w-4 shrink-0" /> : <Globe2 className="h-4 w-4 shrink-0" />}
+          <span className="w-0 opacity-0 group-hover:w-auto group-hover:opacity-100 transition-all duration-300 whitespace-nowrap overflow-hidden">
+            {is3DView ? "2D Map View" : "3D Globe View"}
+          </span>
         </Button>
       </div>
 
