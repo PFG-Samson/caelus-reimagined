@@ -211,7 +211,8 @@ const Index = () => {
     setIs3DView(!is3DView);
     toast({
       title: is3DView ? "Switching to 2D Map" : "Switching to 3D Globe",
-      description: is3DView ? "Loading 2D map view..." : "Loading 3D globe view..."
+      description: is3DView ? "Loading 2D map view..." : "Loading 3D globe view...",
+      duration: 1000,
     });
   };
 
