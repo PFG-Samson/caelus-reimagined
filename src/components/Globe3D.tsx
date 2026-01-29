@@ -33,6 +33,7 @@ interface Globe3DProps {
   showAirports: boolean;
   onAirportClick: (airport: Airport) => void;
   onWeatherPanelOpen?: () => void;
+  windAnimation: boolean;
 }
 
 export interface Globe3DRef {
@@ -45,13 +46,14 @@ export interface Globe3DRef {
 }
 
 const Globe3D = forwardRef<Globe3DRef, Globe3DProps>(
-  ({ activeBasemap, activeWeatherLayers, currentDate, onCoordinatesChange, showAirports, onAirportClick, onWeatherPanelOpen }, ref) => {
+  ({ activeBasemap, activeWeatherLayers, currentDate, onCoordinatesChange, showAirports, onAirportClick, onWeatherPanelOpen, windAnimation }, ref) => {
     const { state } = useSettings();
     const cesiumContainer = useRef<HTMLDivElement>(null);
     const viewer = useRef<Cesium.Viewer | null>(null);
     const weatherImageryLayers = useRef<Map<string, Cesium.ImageryLayer>>(new Map());
     const locationMarker = useRef<Cesium.Entity | null>(null);
     const airportEntities = useRef<Cesium.Entity[]>([]);
+    const windParticleSystem = useRef<Cesium.ParticleSystem | null>(null);
 
     const [weatherPanelOpen, setWeatherPanelOpen] = useState(false);
     const [weatherPayload, setWeatherPayload] = useState<any | null>(null);
@@ -554,6 +556,55 @@ const Globe3D = forwardRef<Globe3DRef, Globe3DProps>(
         loadAirports();
       }
     }, [showAirports]);
+
+    // Handle Wind Animation in 3D
+    useEffect(() => {
+      if (!viewer.current) return;
+
+      if (windParticleSystem.current) {
+        viewer.current.scene.primitives.remove(windParticleSystem.current);
+        windParticleSystem.current = null;
+      }
+
+      if (windAnimation) {
+        // Create a simple wind particle system
+        // In a real app, this would use a vector field. For demo, we'll create a global flow.
+        windParticleSystem.current = new Cesium.ParticleSystem({
+          image: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAACXBIWXMAAAsTAAALEwEAmpwYAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAQSURBVHgBY2RgYPiPAyMAAArvAf9P8uMAAAAASUVORK5CYII=', // White dot
+          startColor: Cesium.Color.WHITE.withAlpha(0.7),
+          endColor: Cesium.Color.WHITE.withAlpha(0.0),
+          startScale: 1.0,
+          endScale: 0.5,
+          minimumParticleLife: 1.0,
+          maximumParticleLife: 3.0,
+          minimumSpeed: 10.0,
+          maximumSpeed: 50.0,
+          imageSize: new Cesium.Cartesian2(4.0, 4.0),
+          emissionRate: 500,
+          lifetime: 10.0,
+          emitter: new Cesium.SphereEmitter(5000000.0), // Large sphere emitter
+          modelMatrix: Cesium.Transforms.eastNorthUpToFixedFrame(Cesium.Cartesian3.fromDegrees(0, 0, 10000)),
+          updateCallback: (particle, dt) => {
+            // Simplified global wind movement (eastwards)
+            const position = particle.position;
+            const cartographic = Cesium.Ellipsoid.WGS84.cartesianToCartographic(position);
+            if (cartographic) {
+              cartographic.longitude += Cesium.Math.toRadians(dt * 0.1);
+              particle.position = Cesium.Ellipsoid.WGS84.cartographicToCartesian(cartographic, position);
+            }
+          }
+        });
+
+        viewer.current.scene.primitives.add(windParticleSystem.current);
+      }
+
+      return () => {
+        if (windParticleSystem.current && viewer.current) {
+          viewer.current.scene.primitives.remove(windParticleSystem.current);
+          windParticleSystem.current = null;
+        }
+      };
+    }, [windAnimation]);
 
     // Handle Airport Clicks in 3D
     useEffect(() => {

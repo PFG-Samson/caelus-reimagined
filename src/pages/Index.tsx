@@ -243,6 +243,7 @@ const Index = () => {
           showAirports={showAirports}
           onAirportClick={handleAirportClick}
           onWeatherPanelOpen={handleWeatherPanelOpen}
+          windAnimation={overlays.windAnimation}
         />
       ) : (
         <WeatherMap
@@ -254,6 +255,7 @@ const Index = () => {
           showAirports={showAirports}
           onAirportClick={handleAirportClick}
           onWeatherPanelOpen={handleWeatherPanelOpen}
+          windAnimation={overlays.windAnimation}
         />
       )}
 

@@ -7,11 +7,14 @@ import React, {
   useState,
   useCallback,
 } from "react";
-import L from "leaflet";
+import * as L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import "leaflet-velocity/dist/leaflet-velocity.css";
+// @ts-ignore
+import "leaflet-velocity";
 import { useToast } from "@/hooks/use-toast";
 import { useGeolocation } from "@/hooks/use-geolocation";
-import { X, Sparkles } from "lucide-react";
+import { X, Sparkles, Wind as WindIcon } from "lucide-react";
 import html2canvas from "html2canvas";
 import { useSettings } from "@/context/SettingsContext";
 import { weatherAI, type WeatherSummaryInput } from "@/lib/aiService";
@@ -45,6 +48,7 @@ interface WeatherMapProps {
   showAirports: boolean;
   onAirportClick: (airport: Airport) => void;
   onWeatherPanelOpen?: () => void;
+  windAnimation: boolean;
 }
 
 export interface WeatherMapRef {
@@ -64,7 +68,7 @@ const weatherCache = new Map<string, { timestamp: number; payload: any }>();
 const CACHE_TTL_MS = 1000 * 60 * 5;
 
 const WeatherMap = forwardRef<WeatherMapRef, WeatherMapProps>(
-  ({ activeBasemap, activeWeatherLayers, currentDate, onCoordinatesChange, showAirports, onAirportClick, onWeatherPanelOpen }, ref) => {
+  ({ activeBasemap, activeWeatherLayers, currentDate, onCoordinatesChange, showAirports, onAirportClick, onWeatherPanelOpen, windAnimation }, ref) => {
     const { state } = useSettings();
     const mapContainer = useRef<HTMLDivElement | null>(null);
     const map = useRef<L.Map | null>(null);
@@ -75,6 +79,7 @@ const WeatherMap = forwardRef<WeatherMapRef, WeatherMapProps>(
 
     // holds created overlay tile layers, keyed by layer id
     const weatherLayers = useRef<{ [key: string]: L.TileLayer }>({});
+    const windLayer = useRef<L.Layer | null>(null);
 
     // track which overlay ids are currently added to map
     const activeOverlayIds = useRef<Set<string>>(new Set());
@@ -530,6 +535,54 @@ const WeatherMap = forwardRef<WeatherMapRef, WeatherMapProps>(
         }
       }
     }, [showAirports, mapReady, onAirportClick]);
+
+    // Handle Wind Animation in 2D
+    useEffect(() => {
+      if (!map.current || !mapReady) return;
+
+      const setupWindLayer = async () => {
+        // Remove existing layer if any
+        if (windLayer.current) {
+          map.current?.removeLayer(windLayer.current);
+          windLayer.current = null;
+        }
+
+        if (windAnimation) {
+          try {
+            const response = await fetch("https://onaci.github.io/leaflet-velocity/wind-global.json");
+            const data = await response.json();
+
+            // @ts-ignore
+            windLayer.current = (L as any).velocityLayer({
+              displayValues: true,
+              displayOptions: {
+                velocityType: "Global Wind",
+                displayPosition: "bottomleft",
+                displayEmptyString: "No wind data",
+                speedUnit: "m/s"
+              },
+              data: data,
+              maxVelocity: 15,
+              velocityScale: 0.005,
+              particleMultiplier: 1 / 100
+            });
+
+            windLayer.current?.addTo(map.current!);
+          } catch (err) {
+            console.error("Failed to load wind data:", err);
+          }
+        }
+      };
+
+      setupWindLayer();
+
+      return () => {
+        if (windLayer.current) {
+          map.current?.removeLayer(windLayer.current);
+          windLayer.current = null;
+        }
+      };
+    }, [windAnimation, mapReady]);
 
     // Initialize the map and events (runs once on mount)
     useEffect(() => {
