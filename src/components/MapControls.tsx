@@ -1,5 +1,5 @@
 import React from 'react';
-import { ZoomIn, ZoomOut, Eye, EyeOff, Wind, Gauge, MapPin as LocationIcon, Moon, Globe2, Map, Plane } from 'lucide-react';
+import { ZoomIn, ZoomOut, Eye, EyeOff, Wind, Gauge, MapPin as LocationIcon, Moon, Globe2, Map, Plane, Video } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface MapControlsProps {
@@ -11,6 +11,7 @@ interface MapControlsProps {
     locationNames: boolean;
     forecastValues: boolean;
     nightBoundary: boolean;
+    webcams: boolean;
   };
   onOverlayToggle: (overlay: keyof MapControlsProps['overlays']) => void;
   is3DView: boolean;
@@ -34,7 +35,8 @@ const MapControls: React.FC<MapControlsProps> = ({
     { key: 'windAnimation' as const, icon: Wind, label: 'Wind Animation', color: 'text-weather-wind' },
     { key: 'locationNames' as const, icon: LocationIcon, label: 'Location Names', color: 'text-muted-foreground' },
     { key: 'forecastValues' as const, icon: Eye, label: 'Forecast Values', color: 'text-muted-foreground' },
-    { key: 'nightBoundary' as const, icon: Moon, label: 'Night Boundary', color: 'text-muted-foreground' }
+    { key: 'nightBoundary' as const, icon: Moon, label: 'Night Boundary', color: 'text-muted-foreground' },
+    { key: 'webcams' as const, icon: Video, label: 'Live Webcams', color: 'text-blue-500' }
   ];
 
   return (

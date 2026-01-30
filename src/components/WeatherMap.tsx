@@ -14,7 +14,7 @@ import "leaflet-velocity/dist/leaflet-velocity.css";
 import "leaflet-velocity";
 import { useToast } from "@/hooks/use-toast";
 import { useGeolocation } from "@/hooks/use-geolocation";
-import { X, Sparkles, Wind as WindIcon } from "lucide-react";
+import { X, Sparkles, Wind as WindIcon, Video } from "lucide-react";
 import html2canvas from "html2canvas";
 import { useSettings } from "@/context/SettingsContext";
 import { weatherAI, type WeatherSummaryInput } from "@/lib/aiService";
@@ -29,6 +29,7 @@ import {
   formatTime
 } from "@/lib/utils";
 import { airportService, type Airport } from "@/services/airportService";
+import { webcamService, type Webcam } from "@/services/webcamService";
 
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -49,6 +50,7 @@ interface WeatherMapProps {
   onAirportClick: (airport: Airport) => void;
   onWeatherPanelOpen?: () => void;
   windAnimation: boolean;
+  showWebcams: boolean;
 }
 
 export interface WeatherMapRef {
@@ -68,7 +70,7 @@ const weatherCache = new Map<string, { timestamp: number; payload: any }>();
 const CACHE_TTL_MS = 1000 * 60 * 5;
 
 const WeatherMap = forwardRef<WeatherMapRef, WeatherMapProps>(
-  ({ activeBasemap, activeWeatherLayers, currentDate, onCoordinatesChange, showAirports, onAirportClick, onWeatherPanelOpen, windAnimation }, ref) => {
+  ({ activeBasemap, activeWeatherLayers, currentDate, onCoordinatesChange, showAirports, onAirportClick, onWeatherPanelOpen, windAnimation, showWebcams }, ref) => {
     const { state } = useSettings();
     const mapContainer = useRef<HTMLDivElement | null>(null);
     const map = useRef<L.Map | null>(null);
@@ -87,6 +89,7 @@ const WeatherMap = forwardRef<WeatherMapRef, WeatherMapProps>(
     const userMarker = useRef<L.Marker | null>(null);
     const locationMarker = useRef<L.Marker | null>(null);
     const airportMarkers = useRef<L.LayerGroup | null>(null);
+    const webcamMarkers = useRef<L.LayerGroup | null>(null);
     const { toast } = useToast();
 
     const measuringRef = useRef(false);
@@ -583,6 +586,65 @@ const WeatherMap = forwardRef<WeatherMapRef, WeatherMapProps>(
         }
       };
     }, [windAnimation, mapReady]);
+
+    // Webcam layer management
+    useEffect(() => {
+      if (!mapReady || !map.current) return;
+
+      if (!webcamMarkers.current) {
+        webcamMarkers.current = L.layerGroup().addTo(map.current);
+      }
+
+      if (!showWebcams) {
+        webcamMarkers.current.clearLayers();
+        return;
+      }
+
+      const updateWebcams = async () => {
+        if (!map.current || !showWebcams) return;
+        const bounds = map.current.getBounds();
+        const webcams = await webcamService.getWebcamsInBounds(
+          bounds.getSouth(),
+          bounds.getWest(),
+          bounds.getNorth(),
+          bounds.getEast()
+        );
+
+        if (!map.current || !showWebcams) return;
+        webcamMarkers.current?.clearLayers();
+
+        webcams.forEach(cam => {
+          const icon = L.divIcon({
+            html: `<div class="bg-blue-600 p-1.5 rounded-full border-2 border-white shadow-lg animate-pulse-slow">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 8-6 4 6 4V8Z"></path><rect width="14" height="12" x="2" y="6" rx="2" ry="2"></rect></svg>
+                  </div>`,
+            className: "",
+            iconSize: [24, 24],
+            iconAnchor: [12, 12],
+          });
+
+          const marker = L.marker([cam.location.latitude, cam.location.longitude], { icon })
+            .bindPopup(`
+              <div class="webcam-popup min-w-[300px]">
+                <h3 class="text-sm font-bold mb-2">${cam.title}</h3>
+                ${cam.player.live ?
+                `<iframe src="${cam.player.live}" width="100%" height="200" frameborder="0" allowfullscreen></iframe>` :
+                `<img src="${cam.images.current.preview}" class="w-full rounded-md shadow-sm" />`
+              }
+                <p class="text-xs text-muted-foreground mt-2">${cam.location.city}, ${cam.location.country}</p>
+              </div>
+            `, { maxWidth: 350 });
+
+          marker.addTo(webcamMarkers.current!);
+        });
+      };
+
+      updateWebcams();
+      map.current.on('moveend', updateWebcams);
+      return () => {
+        map.current?.off('moveend', updateWebcams);
+      };
+    }, [showWebcams, mapReady]);
 
     // Initialize the map and events (runs once on mount)
     useEffect(() => {

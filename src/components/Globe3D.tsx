@@ -2,7 +2,7 @@
 import React, { useEffect, useRef, forwardRef, useImperativeHandle, useState, useCallback } from 'react';
 import * as Cesium from 'cesium';
 import 'cesium/Build/Cesium/Widgets/widgets.css';
-import { X, Sparkles } from 'lucide-react';
+import { X, Sparkles, Video } from 'lucide-react';
 import { useSettings } from '@/context/SettingsContext';
 import { weatherAI, type WeatherSummaryInput } from '@/lib/aiService';
 import {
@@ -16,6 +16,7 @@ import {
   formatTime
 } from '@/lib/utils';
 import { airportService, type Airport } from '@/services/airportService';
+import { webcamService, type Webcam } from '@/services/webcamService';
 
 // Cesium Ion access token
 Cesium.Ion.defaultAccessToken = import.meta.env.VITE_CESIUM_TOKEN;
@@ -34,6 +35,7 @@ interface Globe3DProps {
   onAirportClick: (airport: Airport) => void;
   onWeatherPanelOpen?: () => void;
   windAnimation: boolean;
+  showWebcams: boolean;
 }
 
 export interface Globe3DRef {
@@ -46,13 +48,14 @@ export interface Globe3DRef {
 }
 
 const Globe3D = forwardRef<Globe3DRef, Globe3DProps>(
-  ({ activeBasemap, activeWeatherLayers, currentDate, onCoordinatesChange, showAirports, onAirportClick, onWeatherPanelOpen, windAnimation }, ref) => {
+  ({ activeBasemap, activeWeatherLayers, currentDate, onCoordinatesChange, showAirports, onAirportClick, onWeatherPanelOpen, windAnimation, showWebcams }, ref) => {
     const { state } = useSettings();
     const cesiumContainer = useRef<HTMLDivElement>(null);
     const viewer = useRef<Cesium.Viewer | null>(null);
     const weatherImageryLayers = useRef<Map<string, Cesium.ImageryLayer>>(new Map());
     const locationMarker = useRef<Cesium.Entity | null>(null);
     const airportEntities = useRef<Cesium.Entity[]>([]);
+    const webcamEntities = useRef<Cesium.Entity[]>([]);
     const windParticleSystem = useRef<Cesium.ParticleSystem | null>(null);
 
     const [weatherPanelOpen, setWeatherPanelOpen] = useState(false);
@@ -605,6 +608,74 @@ const Globe3D = forwardRef<Globe3DRef, Globe3DProps>(
         }
       };
     }, [windAnimation]);
+
+    // Webcam layer management (3D)
+    useEffect(() => {
+      if (!viewer.current) return;
+
+      if (!showWebcams) {
+        webcamEntities.current.forEach(entity => viewer.current?.entities.remove(entity));
+        webcamEntities.current = [];
+        return;
+      }
+
+      const updateWebcams = async () => {
+        if (!viewer.current || !showWebcams) return;
+
+        // Get view rectangle
+        const rect = viewer.current.camera.computeViewRectangle();
+        if (!rect) return;
+
+        const west = Cesium.Math.toDegrees(rect.west);
+        const south = Cesium.Math.toDegrees(rect.south);
+        const east = Cesium.Math.toDegrees(rect.east);
+        const north = Cesium.Math.toDegrees(rect.north);
+
+        const webcams = await webcamService.getWebcamsInBounds(south, west, north, east);
+
+        if (!viewer.current || !showWebcams) return;
+
+        // Clear existing
+        webcamEntities.current.forEach(entity => viewer.current?.entities.remove(entity));
+        webcamEntities.current = [];
+
+        webcams.forEach(cam => {
+          const entity = viewer.current!.entities.add({
+            position: Cesium.Cartesian3.fromDegrees(cam.location.longitude, cam.location.latitude),
+            billboard: {
+              image: `data:image/svg+xml,${encodeURIComponent(
+                `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="#2563eb" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 8-6 4 6 4V8Z"></path><rect width="14" height="12" x="2" y="6" rx="2" ry="2"></rect></svg>`
+              )}`,
+              width: 32,
+              height: 32,
+              verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+              disableDepthTestDistance: Number.MAX_VALUE, // Keep on top
+            },
+            name: cam.title,
+            description: new Cesium.ConstantProperty(`
+              <div class="webcam-popup min-w-[300px]">
+                <h3 class="text-sm font-bold mb-2">${cam.title}</h3>
+                ${cam.player.live ?
+                `<iframe src="${cam.player.live}" width="100%" height="200" frameborder="0" allowfullscreen></iframe>` :
+                `<img src="${cam.images.current.preview}" class="w-full rounded-md shadow-sm" />`
+              }
+                <p class="text-xs text-muted-foreground mt-2">${cam.location.city}, ${cam.location.country}</p>
+              </div>
+            `) as any
+          });
+          webcamEntities.current.push(entity);
+        });
+      };
+
+      updateWebcams();
+      const removeListener = viewer.current.camera.moveEnd.addEventListener(updateWebcams);
+
+      return () => {
+        removeListener();
+        webcamEntities.current.forEach(entity => viewer.current?.entities.remove(entity));
+        webcamEntities.current = [];
+      };
+    }, [showWebcams, viewer.current]);
 
     // Handle Airport Clicks in 3D
     useEffect(() => {

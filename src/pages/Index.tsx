@@ -37,13 +37,13 @@ const Index = () => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [isTimelinePlaying, setIsTimelinePlaying] = useState(false);
 
-  // Overlay state
   const [overlays, setOverlays] = useState({
     pressureIsolines: false,
     windAnimation: false,
     locationNames: true,
     forecastValues: false,
-    nightBoundary: false
+    nightBoundary: false,
+    webcams: false
   });
 
   const { toast } = useToast();
@@ -244,7 +244,7 @@ const Index = () => {
           showAirports={showAirports}
           onAirportClick={handleAirportClick}
           onWeatherPanelOpen={handleWeatherPanelOpen}
-          windAnimation={overlays.windAnimation}
+          windAnimation={overlays.windAnimation} showWebcams={overlays.webcams}
         />
       ) : (
         <WeatherMap
@@ -256,7 +256,7 @@ const Index = () => {
           showAirports={showAirports}
           onAirportClick={handleAirportClick}
           onWeatherPanelOpen={handleWeatherPanelOpen}
-          windAnimation={overlays.windAnimation}
+          windAnimation={overlays.windAnimation} showWebcams={overlays.webcams}
         />
       )}
 
