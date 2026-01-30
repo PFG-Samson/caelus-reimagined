@@ -2,17 +2,19 @@
 import React from "react";
 import { Search, Settings, Info, Share, MapPin, Ruler, Globe } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import SearchInput from "./SearchInput";
 import caelusLogo from "@/assets/app-logo.png";
 
 interface HeaderProps {
   onSearchClick?: () => void;
-  onWorldViewClick?: () => void; // new optional prop
+  onWorldViewClick?: () => void;
   onSettingsClick?: () => void;
   onAboutClick?: () => void;
   onShareClick?: () => void;
   onLocationClick?: () => void;
   onMeasureClick?: () => void;
   onSearchSubmit?: (query: string) => void;
+  onResultSelect: (lat: number, lon: number) => void;
 }
 
 const Header: React.FC<HeaderProps> = ({
@@ -24,22 +26,28 @@ const Header: React.FC<HeaderProps> = ({
   onMeasureClick = () => { },
   onWorldViewClick = () => { },
   onSearchSubmit = () => { },
+  onResultSelect,
 }) => {
   return (
-    <header className="absolute top-6 left-0 right-0 z-50 flex items-center justify-center pointer-events-none px-4 select-none">
+    <header className="absolute top-2 left-0 right-0 z-50 flex items-center justify-center pointer-events-none px-4 select-none">
+      {/* Left-side Search Input */}
+      <div className="absolute left-6 pointer-events-auto">
+        <SearchInput onResultSelect={onResultSelect} />
+      </div>
+
       {/* Centered Branding Section */}
       <div className="flex items-center gap-5 px-8 py-3 pointer-events-auto group">
         <div className="relative">
           <img
             src={caelusLogo}
             alt="CAELUS"
-            className="h-24 w-auto"
+            className="h-16 w-auto"
           />
         </div>
 
         <div className="flex flex-col items-start justify-center">
           <h1
-            className="text-4xl font-extrabold text-white tracking-tight leading-none"
+            className="text-3xl font-extrabold text-white tracking-tight leading-none"
             style={{
               fontFamily: "'Outfit', sans-serif",
               textShadow: '0 2px 10px rgba(0,0,0,0.8), 0 0 20px rgba(0,0,0,0.4)'
@@ -48,7 +56,7 @@ const Header: React.FC<HeaderProps> = ({
             CAELUS
           </h1>
           <p
-            className="text-[14px] font-bold text-white uppercase tracking-[0.3em] leading-none mt-2"
+            className="text-[12px] font-bold text-white uppercase tracking-[0.3em] leading-none mt-1"
             style={{
               fontFamily: "'Outfit', sans-serif",
               textShadow: '0 2px 8px rgba(0,0,0,1)'
@@ -70,17 +78,6 @@ const Header: React.FC<HeaderProps> = ({
           aria-label="My location"
         >
           <MapPin className="h-4 w-4" />
-        </Button>
-
-        <Button
-          variant="secondary"
-          size="sm"
-          className="map-control"
-          onClick={onSearchClick}
-          title="Search Location"
-          aria-label="Search location"
-        >
-          <Search className="h-4 w-4" />
         </Button>
 
         {/* World view button */}

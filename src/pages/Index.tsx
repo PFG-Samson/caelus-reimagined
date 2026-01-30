@@ -6,7 +6,6 @@ import LayerSelector from '@/components/LayerSelector';
 import CoordinateDisplay from '@/components/CoordinateDisplay';
 import Timeline from '@/components/Timeline';
 import MapControls from '@/components/MapControls';
-import SearchModal from '@/components/SearchModal';
 import SettingsModal from '@/components/SettingsModal';
 import html2canvas from "html2canvas";
 import AirportPopup from '@/components/AirportPopup';
@@ -22,9 +21,7 @@ const Index = () => {
   const [activeBasemap, setActiveBasemap] = useState('esri');
   const [activeWeatherLayers, setActiveWeatherLayers] = useState<string[]>(['temperature']);
   const [coordinates, setCoordinates] = useState({ lat: 20, lng: 0 });
-  const [searchOpen, setSearchOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
   const [is3DView, setIs3DView] = useState(false);
   const [showAirports, setShowAirports] = useState(false);
   const [selectedAirport, setSelectedAirport] = useState<Airport | null>(null);
@@ -98,12 +95,6 @@ const Index = () => {
   }, []);
 
   // Header action handlers
-  const handleSearchClick = () => setSearchOpen(true);
-
-  const handleSearchSubmit = (query: string) => {
-    setSearchQuery(query);
-    setSearchOpen(true);
-  };
 
   const handleResultSelect = (lat: number, lon: number) => {
     if (is3DView && globeRef.current) {
@@ -261,8 +252,7 @@ const Index = () => {
       )}
 
       <Header
-        onSearchClick={handleSearchClick}
-        onSearchSubmit={handleSearchSubmit}
+        onResultSelect={handleResultSelect}
         onSettingsClick={handleSettingsClick}
         onAboutClick={handleAboutClick}
         onShareClick={handleShareSnapshot}  // ✅ linked to snapshot
@@ -311,12 +301,6 @@ const Index = () => {
           onClose={() => setSelectedAirport(null)}
         />
       )}
-
-      <SearchModal
-        open={searchOpen}
-        onClose={() => setSearchOpen(false)}
-        onResultSelect={handleResultSelect}
-      />
 
       <SettingsModal
         open={settingsOpen}
