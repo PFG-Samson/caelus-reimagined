@@ -132,7 +132,7 @@ const Index = () => {
 
       // Add product name overlay
       const overlay = document.createElement("div");
-      overlay.textContent = "PF-CAELUS – Weather Intelligence";
+      overlay.textContent = "CAELUS – Weather Intelligence";
       overlay.style.position = "absolute";
       overlay.style.top = "20px";
       overlay.style.left = "50%";
@@ -157,7 +157,7 @@ const Index = () => {
 
       // Download image
       const link = document.createElement("a");
-      link.download = `PF-CAELUS_Snapshot_${Date.now()}.png`;
+      link.download = `CAELUS_Snapshot_${Date.now()}.png`;
       link.href = canvas.toDataURL("image/png");
       link.click();
     } catch (err) {

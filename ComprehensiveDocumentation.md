@@ -1,7 +1,7 @@
 
 
 ````markdown
-# **PF-CAELUS**
+# **CAELUS**
 
 ### Modern Weather Intelligence Platform — 2D + 3D, AI-Enhanced, Client-Side
 
@@ -10,7 +10,7 @@
 ## 1. Introduction & Overview
 
 **Product:**  
-PF-CAELUS is a modern, client-side weather intelligence platform that merges **2D mapping (Leaflet)** and a **3D globe (Cesium)** into a single **React + TypeScript SPA**.  
+CAELUS is a modern, client-side weather intelligence platform that merges **2D mapping (Leaflet)** and a **3D globe (Cesium)** into a single **React + TypeScript SPA**.  
 It integrates **OpenWeatherMap** for current/forecast/AQI data, **NASA GIBS** for satellite layers, and optional **AI-generated weather summaries** via OpenAI or Hugging Face.
 
 **Audience:**  

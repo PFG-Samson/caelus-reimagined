@@ -2,7 +2,7 @@
 import React from "react";
 import { Search, Settings, Info, Share, MapPin, Ruler, Globe } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import caelusLogo from "@/assets/caelus-logo.png";
+import caelusLogo from "@/assets/app-logo.png";
 
 interface HeaderProps {
   onSearchClick?: () => void;
@@ -26,18 +26,18 @@ const Header: React.FC<HeaderProps> = ({
   onSearchSubmit = () => { },
 }) => {
   return (
-    <header className="absolute top-1 left-4 right-4 z-50 flex items-center justify-between pointer-events-none">
+    <header className="absolute top-4 left-0 right-0 z-50 flex items-center justify-center pointer-events-none px-4">
       {/* Logo Section */}
-      <div className="flex items-center gap-3 weather-panel px-4 py-3 pointer-events-auto">
-        <img src={caelusLogo} alt="CAELUS" className="h-8 w-auto" />
+      <div className="flex items-center gap-3 px-6 py-2 pointer-events-auto">
+        <img src={caelusLogo} alt="CAELUS" className="h-10 w-auto" />
         <div className="flex flex-col">
-          <h1 className="text-xl font-bold text-foreground">PF-CAELUS</h1>
-          <p className="text-xs text-muted-foreground">Weather Intelligence</p>
+          <h1 className="text-2xl font-bold text-foreground tracking-tight">CAELUS</h1>
+          <p className="text-[10px] text-muted-foreground uppercase tracking-[0.2em] leading-none">Weather Intelligence</p>
         </div>
       </div>
 
       {/* Right Side Controls */}
-      <div className="flex items-center gap-2 pointer-events-auto">
+      <div className="absolute right-4 flex items-center gap-2 pointer-events-auto">
         <Button
           variant="secondary"
           size="sm"
