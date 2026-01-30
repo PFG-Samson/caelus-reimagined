@@ -33,7 +33,7 @@ const Header: React.FC<HeaderProps> = ({
           <img
             src={caelusLogo}
             alt="CAELUS"
-            className="h-16 w-auto drop-shadow-[0_0_15px_rgba(56,189,248,0.4)] group-hover:drop-shadow-[0_0_20px_rgba(56,189,248,0.6)] transition-all duration-300"
+            className="h-24 w-auto"
           />
         </div>
 
