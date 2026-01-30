@@ -57,7 +57,7 @@ const SearchInput: React.FC<SearchInputProps> = ({ onResultSelect, className }) 
                     value={query}
                     onChange={(e) => handleSearch(e.target.value)}
                     onFocus={() => query.length >= 3 && setShowResults(true)}
-                    className="pl-9 bg-black/40 backdrop-blur-md border-white/10 text-white placeholder:text-white/40 focus:bg-black/60 transition-all rounded-full h-10 shadow-lg"
+                    className="pl-9 bg-black/40 backdrop-blur-md border-2 border-white/30 text-white placeholder:text-white/40 focus:border-white/60 focus:bg-black/60 transition-all rounded-full h-10 shadow-lg"
                 />
                 {loading && (
                     <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-white/50" />
