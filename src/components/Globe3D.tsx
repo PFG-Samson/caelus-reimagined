@@ -56,7 +56,8 @@ const Globe3D = forwardRef<Globe3DRef, Globe3DProps>(
     const locationMarker = useRef<Cesium.Entity | null>(null);
     const airportEntities = useRef<Cesium.Entity[]>([]);
     const webcamEntities = useRef<Cesium.Entity[]>([]);
-    const windParticleSystem = useRef<Cesium.ParticleSystem | null>(null);
+    const windBillboards = useRef<Cesium.BillboardCollection | null>(null);
+    const windUpdateListener = useRef<(() => void) | null>(null);
 
     const [weatherPanelOpen, setWeatherPanelOpen] = useState(false);
     const [weatherPayload, setWeatherPayload] = useState<any | null>(null);
@@ -64,6 +65,7 @@ const Globe3D = forwardRef<Globe3DRef, Globe3DProps>(
     const [weatherError, setWeatherError] = useState<string | null>(null);
     const [weatherSummary, setWeatherSummary] = useState<string | null>(null);
     const [summaryLoading, setSummaryLoading] = useState(false);
+    const [selectedWebcam, setSelectedWebcam] = useState<Webcam | null>(null);
 
     useEffect(() => {
       if (!cesiumContainer.current || viewer.current) return;
@@ -560,51 +562,74 @@ const Globe3D = forwardRef<Globe3DRef, Globe3DProps>(
       }
     }, [showAirports]);
 
-    // Handle Wind Animation in 3D
+    // Handle Wind Animation in 3D (Using Billboards for maximum reliability)
     useEffect(() => {
       if (!viewer.current) return;
 
-      if (windParticleSystem.current) {
-        viewer.current.scene.primitives.remove(windParticleSystem.current);
-        windParticleSystem.current = null;
+      // Cleanup previous
+      if (windUpdateListener.current) {
+        windUpdateListener.current();
+        windUpdateListener.current = null;
+      }
+      if (windBillboards.current && viewer.current) {
+        viewer.current.scene.primitives.remove(windBillboards.current);
+        windBillboards.current = null;
       }
 
       if (windAnimation) {
-        // Create a simple wind particle system
-        // In a real app, this would use a vector field. For demo, we'll create a global flow.
-        windParticleSystem.current = new Cesium.ParticleSystem({
-          image: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAACXBIWXMAAAsTAAALEwEAmpwYAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAQSURBVHgBY2RgYPiPAyMAAArvAf9P8uMAAAAASUVORK5CYII=', // White dot
-          startColor: Cesium.Color.WHITE.withAlpha(0.7),
-          endColor: Cesium.Color.WHITE.withAlpha(0.0),
-          startScale: 1.0,
-          endScale: 0.5,
-          minimumParticleLife: 1.0,
-          maximumParticleLife: 3.0,
-          minimumSpeed: 10.0,
-          maximumSpeed: 50.0,
-          imageSize: new Cesium.Cartesian2(4.0, 4.0),
-          emissionRate: 500,
-          lifetime: 10.0,
-          emitter: new Cesium.SphereEmitter(5000000.0), // Large sphere emitter
-          modelMatrix: Cesium.Transforms.eastNorthUpToFixedFrame(Cesium.Cartesian3.fromDegrees(0, 0, 10000)),
-          updateCallback: (particle, dt) => {
-            // Simplified global wind movement (eastwards)
-            const position = particle.position;
-            const cartographic = Cesium.Ellipsoid.WGS84.cartesianToCartographic(position);
-            if (cartographic) {
-              cartographic.longitude += Cesium.Math.toRadians(dt * 0.1);
-              particle.position = Cesium.Ellipsoid.WGS84.cartographicToCartesian(cartographic, position);
-            }
-          }
+        const billboards = new Cesium.BillboardCollection({
+          scene: viewer.current.scene
         });
+        windBillboards.current = billboards;
+        viewer.current.scene.primitives.add(billboards);
 
-        viewer.current.scene.primitives.add(windParticleSystem.current);
+        // Simple glowy dot SVG
+        const dotSvg = `data:image/svg+xml,${encodeURIComponent(
+          '<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="0 0 8 8"><circle cx="4" cy="4" r="3" fill="white" /></svg>'
+        )}`;
+
+        // Initialize wind particles
+        const particleCount = 600;
+        const particles: { billboard: Cesium.Billboard, lat: number, lon: number, height: number, speed: number }[] = [];
+
+        for (let i = 0; i < particleCount; i++) {
+          const lat = (Math.random() - 0.5) * 160; // Avoid poles a bit
+          const lon = (Math.random() - 0.5) * 360;
+          const height = 100000 + Math.random() * 150000; // 100km to 250km
+          const speed = 0.2 + Math.random() * 0.8;
+
+          const b = billboards.add({
+            position: Cesium.Cartesian3.fromDegrees(lon, lat, height),
+            image: dotSvg,
+            width: 4,
+            height: 4,
+            color: Cesium.Color.fromHsl(0.5, 0.8, 0.8, 0.6), // Cyan-ish glow
+            disableDepthTestDistance: Number.POSITIVE_INFINITY, // Visible through everything
+          });
+
+          particles.push({ billboard: b, lat, lon, height, speed });
+        }
+
+        // Animation logic
+        const onPreUpdate = () => {
+          if (!windBillboards.current) return;
+
+          particles.forEach(p => {
+            p.lon += p.speed;
+            if (p.lon > 180) p.lon = -180;
+            p.billboard.position = Cesium.Cartesian3.fromDegrees(p.lon, p.lat, p.height);
+          });
+        };
+
+        const removalFunc = viewer.current.scene.preUpdate.addEventListener(onPreUpdate);
+        windUpdateListener.current = removalFunc;
       }
 
       return () => {
-        if (windParticleSystem.current && viewer.current) {
-          viewer.current.scene.primitives.remove(windParticleSystem.current);
-          windParticleSystem.current = null;
+        if (windUpdateListener.current) windUpdateListener.current();
+        if (windBillboards.current && viewer.current) {
+          viewer.current.scene.primitives.remove(windBillboards.current);
+          windBillboards.current = null;
         }
       };
     }, [windAnimation]);
@@ -652,6 +677,9 @@ const Globe3D = forwardRef<Globe3DRef, Globe3DProps>(
               disableDepthTestDistance: Number.MAX_VALUE, // Keep on top
             },
             name: cam.title,
+            properties: {
+              webcamData: cam
+            },
             description: new Cesium.ConstantProperty(`
               <div class="webcam-popup min-w-[300px]">
                 <h3 class="text-sm font-bold mb-2">${cam.title}</h3>
@@ -684,9 +712,15 @@ const Globe3D = forwardRef<Globe3DRef, Globe3DProps>(
       const handler = new Cesium.ScreenSpaceEventHandler(viewer.current.scene.canvas);
       handler.setInputAction((click: any) => {
         const pickedObject = viewer.current!.scene.pick(click.position);
-        if (Cesium.defined(pickedObject) && pickedObject.id && pickedObject.id.properties?.airportData) {
-          const airport = pickedObject.id.properties.airportData.getValue();
-          onAirportClick(airport);
+        if (Cesium.defined(pickedObject) && pickedObject.id) {
+          if (pickedObject.id.properties?.airportData) {
+            const airport = pickedObject.id.properties.airportData.getValue();
+            onAirportClick(airport);
+          } else if (pickedObject.id.properties?.webcamData) {
+            const webcam = pickedObject.id.properties.webcamData.getValue();
+            setSelectedWebcam(webcam);
+            setWeatherPanelOpen(false); // Close weather panel if webcam is clicked
+          }
         }
       }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
@@ -903,6 +937,72 @@ const Globe3D = forwardRef<Globe3DRef, Globe3DProps>(
             </div>
           </div>
         </div>
+
+        {/* Webcam Popup */}
+        {selectedWebcam && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+            <div className="bg-zinc-900 border border-white/10 rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+              <div className="flex items-center justify-between p-4 border-b border-white/10">
+                <div className="flex items-center gap-3">
+                  <div className="bg-blue-600 p-2 rounded-lg">
+                    <Video size={20} className="text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-white line-clamp-1">{selectedWebcam.title}</h3>
+                    <p className="text-xs text-zinc-400">
+                      {selectedWebcam.location.city}, {selectedWebcam.location.country}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setSelectedWebcam(null)}
+                  className="p-2 hover:bg-white/10 rounded-full text-zinc-400 transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="p-4">
+                <div className="aspect-video relative bg-black rounded-lg overflow-hidden group">
+                  {selectedWebcam.player.live ? (
+                    <iframe
+                      src={selectedWebcam.player.live}
+                      className="w-full h-full"
+                      frameBorder="0"
+                      allowFullScreen
+                    />
+                  ) : (
+                    <img
+                      src={selectedWebcam.images.current.preview}
+                      alt={selectedWebcam.title}
+                      className="w-full h-full object-cover"
+                    />
+                  )}
+                  {selectedWebcam.player.live && (
+                    <div className="absolute top-4 left-4 bg-red-600 text-white text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wider animate-pulse">
+                      Live
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-4 flex items-center justify-between text-xs text-zinc-500">
+                  <div className="flex items-center gap-4">
+                    <span>ID: {selectedWebcam.webcamId}</span>
+                    <span>Views: {selectedWebcam.viewCount.toLocaleString()}</span>
+                  </div>
+                  <a
+                    href={selectedWebcam.urls.detail}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-400 hover:text-blue-300 font-medium transition-colors"
+                  >
+                    View on Windy.com
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
