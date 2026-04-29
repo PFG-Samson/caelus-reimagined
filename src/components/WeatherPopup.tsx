@@ -23,7 +23,7 @@ interface WeatherPopupProps {
   onClose: () => void;
 }
 
-const OPENWEATHER_KEY = import.meta.env.VITE_OPENWEATHER_KEY;
+// API key is now managed by the Intelligence Layer backend
 
 interface WeatherData {
   temp: number;
@@ -52,9 +52,7 @@ const WeatherPopup: React.FC<WeatherPopupProps> = ({ lat, lon, isOpen, onClose }
     setError(null);
 
     try {
-      const res = await fetch(
-        `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&units=metric&appid=${OPENWEATHER_KEY}`
-      );
+      const res = await fetch(`/api/weather?lat=${lat}&lon=${lon}&units=metric`);
       if (!res.ok) throw new Error("Failed to fetch weather data");
 
       const data = await res.json();

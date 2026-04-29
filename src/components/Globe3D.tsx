@@ -21,7 +21,7 @@ import { webcamService, type Webcam } from '@/services/webcamService';
 // Cesium Ion access token
 Cesium.Ion.defaultAccessToken = import.meta.env.VITE_CESIUM_TOKEN;
 
-const OPENWEATHER_KEY = import.meta.env.VITE_OPENWEATHER_KEY;
+// API key is now managed by the Intelligence Layer backend
 
 const weatherCache = new Map<string, { timestamp: number; payload: any }>();
 const CACHE_TTL_MS = 1000 * 60 * 5;
@@ -179,13 +179,13 @@ const Globe3D = forwardRef<Globe3DRef, Globe3DProps>(
       const dateStr = currentDate.toISOString().split("T")[0];
 
       const owmMap: Record<string, string> = {
-        temperature: `https://tile.openweathermap.org/map/temp_new/{z}/{x}/{y}.png?appid=${OPENWEATHER_KEY}`,
-        precipitation: `https://tile.openweathermap.org/map/precipitation_new/{z}/{x}/{y}.png?appid=${OPENWEATHER_KEY}`,
-        wind: `https://tile.openweathermap.org/map/wind_new/{z}/{x}/{y}.png?appid=${OPENWEATHER_KEY}`,
-        pressure: `https://tile.openweathermap.org/map/pressure_new/{z}/{x}/{y}.png?appid=${OPENWEATHER_KEY}`,
-        clouds: `https://tile.openweathermap.org/map/clouds_new/{z}/{x}/{y}.png?appid=${OPENWEATHER_KEY}`,
-        snow: `https://tile.openweathermap.org/map/snow_new/{z}/{x}/{y}.png?appid=${OPENWEATHER_KEY}`,
-        wind_gust: `https://tile.openweathermap.org/map/wind_gust/{z}/{x}/{y}.png?appid=${OPENWEATHER_KEY}`,
+        temperature: `/api/tiles/temp_new/{z}/{x}/{y}`,
+        precipitation: `/api/tiles/precipitation_new/{z}/{x}/{y}`,
+        wind: `/api/tiles/wind_new/{z}/{x}/{y}`,
+        pressure: `/api/tiles/pressure_new/{z}/{x}/{y}`,
+        clouds: `/api/tiles/clouds_new/{z}/{x}/{y}`,
+        snow: `/api/tiles/snow_new/{z}/{x}/{y}`,
+        wind_gust: `/api/tiles/wind_gust/{z}/{x}/{y}`,
 
         // Add GIBS layers support
         modis: gibUrl("MODIS_Terra_CorrectedReflectance_TrueColor", dateStr),
@@ -246,9 +246,9 @@ const Globe3D = forwardRef<Globe3DRef, Globe3DProps>(
       setWeatherError(null);
 
       try {
-        const currentUrl = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${OPENWEATHER_KEY}&units=metric`;
-        const forecastUrl = `https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&appid=${OPENWEATHER_KEY}&units=metric`;
-        const airUrl = `https://api.openweathermap.org/data/2.5/air_pollution?lat=${lat}&lon=${lon}&appid=${OPENWEATHER_KEY}`;
+        const currentUrl = `/api/weather?lat=${lat}&lon=${lon}&units=metric`;
+        const forecastUrl = `/api/forecast?lat=${lat}&lon=${lon}&units=metric`;
+        const airUrl = `/api/air-quality?lat=${lat}&lon=${lon}`;
 
         const [curRes, foreRes, airRes] = await Promise.all([
           fetch(currentUrl),

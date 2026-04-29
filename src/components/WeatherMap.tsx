@@ -65,7 +65,7 @@ export interface WeatherMapRef {
 }
 
 const GIBS_API_KEY = import.meta.env.VITE_GIBS_API_KEY;
-const OPENWEATHER_KEY = import.meta.env.VITE_OPENWEATHER_KEY;
+// API key is now managed by the Intelligence Layer backend
 const weatherCache = new Map<string, { timestamp: number; payload: any }>();
 const CACHE_TTL_MS = 1000 * 60 * 5;
 
@@ -168,9 +168,9 @@ const WeatherMap = forwardRef<WeatherMapRef, WeatherMapProps>(
       setWeatherError(null);
 
       try {
-        const currentUrl = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${OPENWEATHER_KEY}&units=metric`;
-        const forecastUrl = `https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&appid=${OPENWEATHER_KEY}&units=metric`;
-        const airUrl = `https://api.openweathermap.org/data/2.5/air_pollution?lat=${lat}&lon=${lon}&appid=${OPENWEATHER_KEY}`;
+        const currentUrl = `/api/weather?lat=${lat}&lon=${lon}&units=metric`;
+        const forecastUrl = `/api/forecast?lat=${lat}&lon=${lon}&units=metric`;
+        const airUrl = `/api/air-quality?lat=${lat}&lon=${lon}`;
 
         const [curRes, foreRes, airRes] = await Promise.all([
           fetch(currentUrl),
@@ -363,13 +363,13 @@ const WeatherMap = forwardRef<WeatherMapRef, WeatherMapProps>(
 
       // map of OWM key names -> url template
       const owmMap: Record<string, string> = {
-        temperature: `https://tile.openweathermap.org/map/temp_new/{z}/{x}/{y}.png?appid=${OPENWEATHER_KEY}`,
-        precipitation: `https://tile.openweathermap.org/map/precipitation_new/{z}/{x}/{y}.png?appid=${OPENWEATHER_KEY}`,
-        wind: `https://tile.openweathermap.org/map/wind_new/{z}/{x}/{y}.png?appid=${OPENWEATHER_KEY}`,
-        pressure: `https://tile.openweathermap.org/map/pressure_new/{z}/{x}/{y}.png?appid=${OPENWEATHER_KEY}`,
-        clouds: `https://tile.openweathermap.org/map/clouds_new/{z}/{x}/{y}.png?appid=${OPENWEATHER_KEY}`,
-        snow: `https://tile.openweathermap.org/map/snow_new/{z}/{x}/{y}.png?appid=${OPENWEATHER_KEY}`,
-        wind_gust: `https://tile.openweathermap.org/map/wind_gust/{z}/{x}/{y}.png?appid=${OPENWEATHER_KEY}`,
+        temperature: `/api/tiles/temp_new/{z}/{x}/{y}`,
+        precipitation: `/api/tiles/precipitation_new/{z}/{x}/{y}`,
+        wind: `/api/tiles/wind_new/{z}/{x}/{y}`,
+        pressure: `/api/tiles/pressure_new/{z}/{x}/{y}`,
+        clouds: `/api/tiles/clouds_new/{z}/{x}/{y}`,
+        snow: `/api/tiles/snow_new/{z}/{x}/{y}`,
+        wind_gust: `/api/tiles/wind_gust/{z}/{x}/{y}`,
       };
 
       if (owmSupported.has(layerId) && owmMap[layerId]) {
