@@ -2,6 +2,9 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import axios from 'axios';
+import { extractSignals } from './engine/signals';
+import { defaultRules } from './engine/rules';
+import { evaluate } from './engine/evaluator';
 
 dotenv.config();
 
@@ -141,12 +144,15 @@ app.get('/api/insights', async (req, res) => {
       }),
     ]);
 
+    const signals = extractSignals(weatherRes.data, forecastRes.data, airRes.data);
+    const insights = evaluate(signals, defaultRules);
+
     res.json({
       current: weatherRes.data,
       forecast: forecastRes.data,
       airQuality: airRes.data,
-      // Phase 2: insights will be populated by the Rule Engine
-      insights: [],
+      signals: signals,
+      insights: insights,
     });
   } catch (error: any) {
     console.error('Error fetching insights:', error.message);
