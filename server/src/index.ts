@@ -5,6 +5,10 @@ import axios from 'axios';
 import { extractSignals } from './engine/signals';
 import { defaultRules } from './engine/rules';
 import { evaluate } from './engine/evaluator';
+import rulesRouter from './routes/rules';
+import { PrismaClient } from './generated/prisma';
+
+const prisma = new PrismaClient();
 
 dotenv.config();
 
@@ -19,6 +23,9 @@ if (!OPENWEATHER_KEY) {
 
 app.use(cors());
 app.use(express.json());
+
+// Mount the rules CRUD router
+app.use('/api/rules', rulesRouter);
 
 // ─── Health Check ────────────────────────────────────────────────
 app.get('/api/health', (_req, res) => {
@@ -145,7 +152,28 @@ app.get('/api/insights', async (req, res) => {
     ]);
 
     const signals = extractSignals(weatherRes.data, forecastRes.data, airRes.data);
-    const insights = evaluate(signals, defaultRules);
+    
+    // Fetch rules from database
+    let dbRules = await prisma.rule.findMany();
+    
+    // Seed default rules if database is empty
+    if (dbRules.length === 0) {
+      console.log('Seeding default rules into the database...');
+      await prisma.rule.createMany({
+        data: defaultRules.map(rule => ({
+          name: rule.name,
+          signal: rule.signal,
+          operator: rule.operator,
+          threshold: rule.threshold,
+          severity: rule.severity,
+          message: rule.message,
+          category: rule.category,
+        })),
+      });
+      dbRules = await prisma.rule.findMany();
+    }
+
+    const insights = evaluate(signals, dbRules as any);
 
     res.json({
       current: weatherRes.data,
