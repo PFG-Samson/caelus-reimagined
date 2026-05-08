@@ -12,7 +12,7 @@ datasource db {
 }
 
 model Rule {
-  id        String   @id @default(uuid())
+  id        String     @id @default(uuid())
   name      String
   signal    String
   operator  String
@@ -20,6 +20,34 @@ model Rule {
   severity  String
   message   String
   category  String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  zoneRules ZoneRule[]
+}
+
+model Zone {
+  id          String     @id @default(uuid())
+  name        String
+  description String     @default("")
+  type        String     // "circle" or "polygon"
+  centerLat   Float?     // For circle zones
+  centerLon   Float?     // For circle zones
+  radiusKm    Float?     // For circle zones (km)
+  polygon     String?    // GeoJSON string for polygon zones
+  isActive    Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  zoneRules   ZoneRule[]
+}
+
+model ZoneRule {
+  id                String  @id @default(uuid())
+  zoneId            String
+  ruleId            String
+  thresholdOverride Float?  // Optional: override the rule's threshold for this zone
+  zone              Zone    @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+  rule              Rule    @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  createdAt         DateTime @default(now())
+
+  @@unique([zoneId, ruleId])
 }

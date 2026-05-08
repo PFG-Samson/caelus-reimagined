@@ -5,8 +5,12 @@ import axios from 'axios';
 import { extractSignals } from './engine/signals';
 import { defaultRules } from './engine/rules';
 import { evaluate } from './engine/evaluator';
+import { ensurePostGIS, findZonesContainingPoint } from './engine/spatial';
+import { defaultZones } from './engine/defaultZones';
 import rulesRouter from './routes/rules';
+import zonesRouter from './routes/zones';
 import { PrismaClient } from './generated/prisma';
+import type { RiskRule, ZoneSummary } from './engine/types';
 
 const prisma = new PrismaClient();
 
@@ -24,8 +28,9 @@ if (!OPENWEATHER_KEY) {
 app.use(cors());
 app.use(express.json());
 
-// Mount the rules CRUD router
+// Mount CRUD routers
 app.use('/api/rules', rulesRouter);
+app.use('/api/zones', zonesRouter);
 
 // ─── Health Check ────────────────────────────────────────────────
 app.get('/api/health', (_req, res) => {
@@ -129,8 +134,7 @@ app.get('/api/tiles/:layer/:z/:x/:y', async (req, res) => {
 });
 
 // ─── GET /api/insights ───────────────────────────────────────────
-// Combined endpoint: returns weather + forecast + air quality + insights
-// Insights are empty for Phase 1 — will be populated by the Rule Engine in Phase 2
+// Combined endpoint: returns weather + forecast + air quality + zone-aware insights
 app.get('/api/insights', async (req, res) => {
   const { lat, lon, units = 'metric' } = req.query;
 
@@ -139,7 +143,8 @@ app.get('/api/insights', async (req, res) => {
   }
 
   try {
-    const [weatherRes, forecastRes, airRes] = await Promise.all([
+    // Fetch weather data and find matching zones in parallel
+    const [weatherRes, forecastRes, airRes, matchingZones] = await Promise.all([
       axios.get('https://api.openweathermap.org/data/2.5/weather', {
         params: { lat, lon, units, appid: OPENWEATHER_KEY },
       }),
@@ -149,11 +154,12 @@ app.get('/api/insights', async (req, res) => {
       axios.get('https://api.openweathermap.org/data/2.5/air_pollution', {
         params: { lat, lon, appid: OPENWEATHER_KEY },
       }),
+      findZonesContainingPoint(Number(lat), Number(lon)),
     ]);
 
     const signals = extractSignals(weatherRes.data, forecastRes.data, airRes.data);
     
-    // Fetch rules from database
+    // Fetch global rules from database
     let dbRules = await prisma.rule.findMany();
     
     // Seed default rules if database is empty
@@ -173,14 +179,65 @@ app.get('/api/insights', async (req, res) => {
       dbRules = await prisma.rule.findMany();
     }
 
-    const insights = evaluate(signals, dbRules as any);
+    // Evaluate global rules (no zone tag)
+    const globalInsights = evaluate(signals, dbRules as any);
+
+    // Evaluate zone-specific rules
+    const zoneSummaries: ZoneSummary[] = [];
+    const zoneInsights: typeof globalInsights = [];
+
+    if (matchingZones.length > 0) {
+      // Fetch zone rules for all matching zones
+      const zoneRules = await prisma.zoneRule.findMany({
+        where: {
+          zoneId: { in: matchingZones.map(z => z.id) },
+        },
+        include: { rule: true, zone: true },
+      });
+
+      // Evaluate zone-specific rules
+      for (const zr of zoneRules) {
+        const rule = zr.rule;
+        const ruleForEval: RiskRule = {
+          id: rule.id,
+          name: rule.name,
+          signal: rule.signal as any,
+          operator: rule.operator as any,
+          threshold: zr.thresholdOverride ?? rule.threshold,
+          severity: rule.severity as any,
+          message: rule.message,
+          category: rule.category as any,
+        };
+
+        const zoneResult = evaluate(signals, [ruleForEval]);
+        zoneResult.forEach(insight => {
+          insight.zoneName = zr.zone.name;
+          insight.zoneId = zr.zone.id;
+        });
+        zoneInsights.push(...zoneResult);
+      }
+
+      // Build zone summaries
+      for (const zone of matchingZones) {
+        zoneSummaries.push({
+          id: zone.id,
+          name: zone.name,
+          type: zone.type as any,
+          insightCount: zoneInsights.filter(i => i.zoneId === zone.id).length,
+        });
+      }
+    }
+
+    // Merge: zone insights first (they're location-specific), then global
+    const allInsights = [...zoneInsights, ...globalInsights];
 
     res.json({
       current: weatherRes.data,
       forecast: forecastRes.data,
       airQuality: airRes.data,
       signals: signals,
-      insights: insights,
+      insights: allInsights,
+      zones: zoneSummaries,
     });
   } catch (error: any) {
     console.error('Error fetching insights:', error.message);
@@ -192,9 +249,30 @@ app.get('/api/insights', async (req, res) => {
 });
 
 // ─── Start Server ────────────────────────────────────────────────
-app.listen(port, () => {
-  console.log(`\n🧠 CAELUS Intelligence Layer running on http://localhost:${port}`);
-  console.log(`   Health check: http://localhost:${port}/api/health`);
-  console.log(`   Weather:      http://localhost:${port}/api/weather?lat=6.5&lon=3.4`);
-  console.log(`   Insights:     http://localhost:${port}/api/insights?lat=6.5&lon=3.4\n`);
+async function startServer() {
+  // Enable PostGIS extension
+  await ensurePostGIS();
+
+  // Seed default zones if table is empty
+  const zoneCount = await prisma.zone.count();
+  if (zoneCount === 0) {
+    console.log('   Seeding default zones...');
+    for (const zone of defaultZones) {
+      await prisma.zone.create({ data: zone });
+    }
+    console.log(`   Seeded ${defaultZones.length} default zones.`);
+  }
+
+  app.listen(port, () => {
+    console.log(`\n🧠 CAELUS Intelligence Layer running on http://localhost:${port}`);
+    console.log(`   Health check: http://localhost:${port}/api/health`);
+    console.log(`   Weather:      http://localhost:${port}/api/weather?lat=6.5&lon=3.4`);
+    console.log(`   Insights:     http://localhost:${port}/api/insights?lat=6.5&lon=3.4`);
+    console.log(`   Zones:        http://localhost:${port}/api/zones\n`);
+  });
+}
+
+startServer().catch((err) => {
+  console.error('❌ Failed to start server:', err);
+  process.exit(1);
 });

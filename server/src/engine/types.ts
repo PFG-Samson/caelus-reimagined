@@ -42,4 +42,27 @@ export interface Insight {
   category: Category;
   signal: WeatherSignal;
   triggeredAt: string;
+  zoneName?: string;
+  zoneId?: string;
+}
+
+export type ZoneType = 'circle' | 'polygon';
+
+export interface ZoneData {
+  id: string;
+  name: string;
+  description: string;
+  type: ZoneType;
+  centerLat: number | null;
+  centerLon: number | null;
+  radiusKm: number | null;
+  polygon: string | null;
+  isActive: boolean;
+}
+
+export interface ZoneSummary {
+  id: string;
+  name: string;
+  type: ZoneType;
+  insightCount: number;
 }
