@@ -17,6 +17,8 @@ import {
 } from '@/lib/utils';
 import { airportService, type Airport } from '@/services/airportService';
 import { webcamService, type Webcam } from '@/services/webcamService';
+import { useIntelligence } from '@/hooks/useIntelligence';
+import IntelligencePanel from './IntelligencePanel';
 
 // Cesium Ion access token
 Cesium.Ion.defaultAccessToken = import.meta.env.VITE_CESIUM_TOKEN;
@@ -61,11 +63,88 @@ const Globe3D = forwardRef<Globe3DRef, Globe3DProps>(
 
     const [weatherPanelOpen, setWeatherPanelOpen] = useState(false);
     const [weatherPayload, setWeatherPayload] = useState<any | null>(null);
-    const [weatherLoading, setWeatherLoading] = useState(false);
-    const [weatherError, setWeatherError] = useState<string | null>(null);
     const [weatherSummary, setWeatherSummary] = useState<string | null>(null);
     const [summaryLoading, setSummaryLoading] = useState(false);
     const [selectedWebcam, setSelectedWebcam] = useState<Webcam | null>(null);
+
+    // Intelligence Layer State
+    const [selectedCoords, setSelectedCoords] = useState<{ lat: number; lon: number } | null>(null);
+    const { 
+      data: intelligenceData, 
+      isLoading: intelligenceLoading, 
+      error: intelligenceError,
+      refetch: refetchIntelligence 
+    } = useIntelligence(selectedCoords?.lat ?? null, selectedCoords?.lon ?? null);
+
+    // AI Summary Generator
+    const generateWeatherSummary = useCallback(async (weatherData: any): Promise<string> => {
+      const current = weatherData.current;
+      const forecast = weatherData.forecast;
+      const airQuality = weatherData.airQuality;
+
+      const summaryInput: WeatherSummaryInput = {
+        current: {
+          temp: current.main.temp,
+          conditions: current.weather[0]?.description || 'unknown',
+          windSpeed: current.wind?.speed || 0,
+          humidity: current.main.humidity,
+          pressure: current.main.pressure,
+          location: current.name || 'Unknown location'
+        },
+        forecast: forecast?.list?.slice(0, 5).map((item: any) => {
+          const date = new Date(item.dt * 1000);
+          const hours = date.getHours();
+          const timeLabel = hours === 0 ? 'midnight' : hours === 12 ? 'noon' : hours < 12 ? `${hours}am` : `${hours - 12}pm`;
+          return {
+            date: `${date.toLocaleDateString()} ${timeLabel}`,
+            temp: item.main.temp,
+            conditions: item.weather[0]?.description || 'unknown'
+          };
+        }),
+        airQuality: airQuality?.list?.[0] ? {
+          aqi: airQuality.list[0].main.aqi,
+          pm25: airQuality.list[0].components.pm2_5,
+          pm10: airQuality.list[0].components.pm10
+        } : undefined
+      };
+
+      try {
+        return await weatherAI.generateWeatherSummary(summaryInput);
+      } catch (error) {
+        console.error("AI summary error:", error);
+        return "Weather summary temporarily unavailable.";
+      }
+    }, []);
+
+    // Sync intelligence data with local weatherPayload for compatibility
+    useEffect(() => {
+      if (intelligenceData) {
+        setWeatherPayload({
+          current: intelligenceData.current,
+          forecast: intelligenceData.forecast,
+          airQuality: intelligenceData.airQuality
+        });
+        
+        // Trigger AI summary generation when new data arrives
+        const generateSummary = async () => {
+          setSummaryLoading(true);
+          try {
+            const summary = await generateWeatherSummary({
+              current: intelligenceData.current,
+              forecast: intelligenceData.forecast,
+              airQuality: intelligenceData.airQuality
+            });
+            setWeatherSummary(summary);
+          } catch (err) {
+            console.error("AI Summary error:", err);
+            setWeatherSummary("AI summary unavailable.");
+          } finally {
+            setSummaryLoading(false);
+          }
+        };
+        generateSummary();
+      }
+    }, [intelligenceData, generateWeatherSummary]);
 
     useEffect(() => {
       if (!cesiumContainer.current || viewer.current) return;
@@ -131,33 +210,10 @@ const Globe3D = forwardRef<Globe3DRef, Globe3DProps>(
             },
           });
 
-          // Fetch and display weather
-          setWeatherPayload(null);
-          setWeatherError(null);
-          setWeatherSummary(null);
-          setWeatherLoading(true);
+          // Fetch and display weather via intelligence layer
           setWeatherPanelOpen(true);
           onWeatherPanelOpen?.();
-
-          const payload = await fetchWeather(lat, lng);
-          setWeatherLoading(false);
-
-          if (payload) {
-            setWeatherPayload(payload);
-            setWeatherError(null);
-
-            // Generate AI summary in the background
-            setSummaryLoading(true);
-            try {
-              const summary = await generateWeatherSummary(payload);
-              setWeatherSummary(summary);
-            } catch (error) {
-              console.error('AI summary generation failed:', error);
-              setWeatherSummary("AI summary temporarily unavailable.");
-            } finally {
-              setSummaryLoading(false);
-            }
-          }
+          setSelectedCoords({ lat, lon: lng });
         }
       }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
@@ -194,91 +250,7 @@ const Globe3D = forwardRef<Globe3DRef, Globe3DProps>(
       return owmMap[layerId] || null;
     };
 
-    // Fetch weather data
-    const generateWeatherSummary = async (weatherData: any): Promise<string> => {
-      const current = weatherData.current;
-      const forecast = weatherData.forecast;
-      const airQuality = weatherData.airQuality;
 
-      const summaryInput: WeatherSummaryInput = {
-        current: {
-          temp: current.main.temp,
-          conditions: current.weather[0]?.description || 'unknown',
-          windSpeed: current.wind?.speed || 0,
-          humidity: current.main.humidity,
-          pressure: current.main.pressure,
-          location: current.name || 'Unknown location'
-        },
-        forecast: forecast?.list?.slice(0, 5).map((item: any) => {
-          const date = new Date(item.dt * 1000);
-          const hours = date.getHours();
-          const timeLabel = hours === 0 ? 'midnight' : hours === 12 ? 'noon' : hours < 12 ? `${hours}am` : `${hours - 12}pm`;
-          return {
-            date: `${date.toLocaleDateString()} ${timeLabel}`,
-            temp: item.main.temp,
-            conditions: item.weather[0]?.description || 'unknown'
-          };
-        }),
-        airQuality: airQuality?.list?.[0] ? {
-          aqi: airQuality.list[0].main.aqi,
-          pm25: airQuality.list[0].components.pm2_5,
-          pm10: airQuality.list[0].components.pm10
-        } : undefined
-      };
-
-      try {
-        return await weatherAI.generateWeatherSummary(summaryInput);
-      } catch (error) {
-        console.error("AI summary error:", error);
-        return "Weather summary temporarily unavailable.";
-      }
-    };
-
-    const fetchWeather = useCallback(async (lat: number, lon: number) => {
-      const key = `${lat.toFixed(4)},${lon.toFixed(4)}`;
-      const now = Date.now();
-      const cached = weatherCache.get(key);
-      if (cached && now - cached.timestamp < CACHE_TTL_MS) {
-        return cached.payload;
-      }
-
-      setWeatherLoading(true);
-      setWeatherError(null);
-
-      try {
-        const currentUrl = `/api/weather?lat=${lat}&lon=${lon}&units=metric`;
-        const forecastUrl = `/api/forecast?lat=${lat}&lon=${lon}&units=metric`;
-        const airUrl = `/api/air-quality?lat=${lat}&lon=${lon}`;
-
-        const [curRes, foreRes, airRes] = await Promise.all([
-          fetch(currentUrl),
-          fetch(forecastUrl),
-          fetch(airUrl),
-        ]);
-
-        const curText = await curRes.text();
-        const foreText = await foreRes.text();
-        const airText = await airRes.text();
-
-        if (!curRes.ok) throw new Error(JSON.parse(curText)?.message || `OpenWeather current error ${curRes.status}`);
-        if (!foreRes.ok) throw new Error(JSON.parse(foreText)?.message || `OpenWeather forecast error ${foreRes.status}`);
-        if (!airRes.ok) throw new Error(JSON.parse(airText)?.message || `OpenWeather AQI error ${airRes.status}`);
-
-        const current = JSON.parse(curText);
-        const forecast = JSON.parse(foreText);
-        const airQuality = JSON.parse(airText);
-
-        const payload = { current, forecast, airQuality };
-        weatherCache.set(key, { timestamp: now, payload });
-        return payload;
-      } catch (err: any) {
-        console.error("[Globe3D] fetchWeather error:", err);
-        setWeatherError(err?.message || "Failed to fetch weather");
-        return null;
-      } finally {
-        setWeatherLoading(false);
-      }
-    }, []);
 
     const closeWeatherPanel = () => {
       setWeatherPanelOpen(false);
@@ -286,11 +258,12 @@ const Globe3D = forwardRef<Globe3DRef, Globe3DProps>(
         viewer.current.entities.remove(locationMarker.current);
         locationMarker.current = null;
       }
+      setSelectedCoords(null);
     };
 
     const renderWeatherPanelContent = () => {
-      if (weatherLoading) return <div className="flex-1 flex items-center justify-center">Loading weather…</div>;
-      if (weatherError) return <div className="flex-1 p-4 text-sm">Error: {weatherError}</div>;
+      if (intelligenceLoading) return <div className="flex-1 flex items-center justify-center">Loading weather…</div>;
+      if (intelligenceError) return <div className="flex-1 p-4 text-sm">Error: {(intelligenceError as any)?.message || "Failed to load weather"}</div>;
       if (!weatherPayload) return <div className="flex-1 p-4 text-sm">Click on the globe to load weather for a location.</div>;
 
       const c = weatherPayload.current;
@@ -773,47 +746,10 @@ const Globe3D = forwardRef<Globe3DRef, Globe3DProps>(
           },
         });
 
-        // Fetch and display weather
-        setWeatherPayload(null);
-        setWeatherError(null);
-        setWeatherSummary(null);
-        setWeatherLoading(true);
+        // Fetch and display weather via intelligence layer
         setWeatherPanelOpen(true);
         onWeatherPanelOpen?.();
-
-        const payload = await fetchWeather(lat, lng);
-        setWeatherLoading(false);
-
-        if (payload) {
-          setWeatherPayload(payload);
-          setWeatherError(null);
-
-          // Update marker with location label
-          if (locationMarker.current && payload.current?.name) {
-            locationMarker.current.label = new Cesium.LabelGraphics({
-              text: payload.current.name,
-              font: '14px sans-serif',
-              fillColor: Cesium.Color.WHITE,
-              outlineColor: Cesium.Color.BLACK,
-              outlineWidth: 2,
-              style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-              verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-              pixelOffset: new Cesium.Cartesian2(0, -15),
-            });
-          }
-
-          // Generate AI summary in the background
-          setSummaryLoading(true);
-          try {
-            const summary = await generateWeatherSummary(payload);
-            setWeatherSummary(summary);
-          } catch (error) {
-            console.error('AI summary generation failed:', error);
-            setWeatherSummary("AI summary temporarily unavailable.");
-          } finally {
-            setSummaryLoading(false);
-          }
-        }
+        setSelectedCoords({ lat, lon: lng });
       },
       zoomIn: () => {
         if (viewer.current) {
@@ -852,47 +788,10 @@ const Globe3D = forwardRef<Globe3DRef, Globe3DProps>(
                 },
               });
 
-              // Fetch and display weather
-              setWeatherPayload(null);
-              setWeatherError(null);
-              setWeatherSummary(null);
-              setWeatherLoading(true);
+              // Trigger weather fetch + panel UI via intelligence layer
               setWeatherPanelOpen(true);
               onWeatherPanelOpen?.();
-
-              const payload = await fetchWeather(lat, lng);
-              setWeatherLoading(false);
-
-              if (payload) {
-                setWeatherPayload(payload);
-                setWeatherError(null);
-
-                // Update marker with location label
-                if (locationMarker.current && payload.current?.name) {
-                  locationMarker.current.label = new Cesium.LabelGraphics({
-                    text: payload.current.name,
-                    font: '14px sans-serif',
-                    fillColor: Cesium.Color.WHITE,
-                    outlineColor: Cesium.Color.BLACK,
-                    outlineWidth: 2,
-                    style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-                    verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-                    pixelOffset: new Cesium.Cartesian2(0, -15),
-                  });
-                }
-
-                // Generate AI summary in the background
-                setSummaryLoading(true);
-                try {
-                  const summary = await generateWeatherSummary(payload);
-                  setWeatherSummary(summary);
-                } catch (error) {
-                  console.error('AI summary generation failed:', error);
-                  setWeatherSummary("AI summary temporarily unavailable.");
-                } finally {
-                  setSummaryLoading(false);
-                }
-              }
+              setSelectedCoords({ lat, lon: lng });
             }
           });
         }
@@ -923,17 +822,31 @@ const Globe3D = forwardRef<Globe3DRef, Globe3DProps>(
             opacity: weatherPanelOpen ? 1 : 0,
             pointerEvents: weatherPanelOpen ? "auto" : "none",
           }}
-          className='pointer-events-auto fixed right-4 top-4 h-[calc(100vh-3rem)] w-[360px] z-2 mt-8'
+          className='pointer-events-auto fixed right-4 top-4 h-[calc(100vh-3rem)] w-[360px] z-50 mt-8'
         >
-          <div className="h-67 flex flex-col rounded-lg overflow-hidden shadow-2xl" style={{ pointerEvents: weatherPanelOpen ? "auto" : "none" }}>
-            <div className="p-2 bg-transparent flex items-center justify-end">
-              <button onClick={closeWeatherPanel} aria-label="Close weather panel" className="p-2 rounded hover:bg-white/10 text-white" title="Close"
-                style={{ marginTop: '16px' }}>
-                <X size={18} className="bg-red-500 absolute" />
+          <div className="h-full flex flex-col rounded-xl overflow-hidden shadow-2xl border border-white/10 bg-black/40 backdrop-blur-xl" style={{ pointerEvents: weatherPanelOpen ? "auto" : "none" }}>
+            <div className="p-2 bg-transparent flex items-center justify-between px-4 pt-4 relative z-20">
+              <div className="flex flex-col">
+                <span className="text-[10px] uppercase tracking-widest text-white/40 font-bold">Location Intelligence</span>
+                <span className="text-sm font-bold text-white truncate max-w-[200px]">
+                  {weatherPayload?.current?.name || "Global Monitoring"}
+                </span>
+              </div>
+              <button onClick={closeWeatherPanel} aria-label="Close panel" className="p-2 rounded-full hover:bg-white/10 text-white/60 hover:text-white transition-all">
+                <X size={18} />
               </button>
             </div>
-            <div className="flex-1 overflow-auto p-3" style={{ background: "linear-gradient(180deg, rgba(0,0,0,0.45), rgba(0,0,0,0.3))", backdropFilter: "blur(8px) saturate(120%)" }}>
-              {renderWeatherPanelContent()}
+            
+            <div className="flex-1 overflow-hidden relative">
+              <IntelligencePanel 
+                insights={intelligenceData?.insights || []}
+                signals={intelligenceData?.signals || []}
+                zones={intelligenceData?.zones || []}
+                loading={intelligenceLoading}
+                error={intelligenceError ? (intelligenceError as Error).message : null}
+                onRetry={refetchIntelligence}
+                renderWeather={renderWeatherPanelContent}
+              />
             </div>
           </div>
         </div>
