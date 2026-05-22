@@ -842,6 +842,7 @@ const Globe3D = forwardRef<Globe3DRef, Globe3DProps>(
                 insights={intelligenceData?.insights || []}
                 signals={intelligenceData?.signals || []}
                 zones={intelligenceData?.zones || []}
+                forecast={intelligenceData?.forecast}
                 loading={intelligenceLoading}
                 error={intelligenceError ? (intelligenceError as Error).message : null}
                 onRetry={refetchIntelligence}

@@ -986,6 +986,7 @@ const WeatherMap = forwardRef<WeatherMapRef, WeatherMapProps>(
                 insights={intelligenceData?.insights || []}
                 signals={intelligenceData?.signals || []}
                 zones={intelligenceData?.zones || []}
+                forecast={intelligenceData?.forecast}
                 loading={intelligenceLoading}
                 error={intelligenceError ? (intelligenceError as Error).message : null}
                 onRetry={refetchIntelligence}
