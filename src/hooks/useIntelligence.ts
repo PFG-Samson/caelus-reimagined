@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { InsightsResponse } from '@/types/intelligence';
+import { InsightsResponse, ZoneData } from '@/types/intelligence';
 
 async function fetchInsights(lat: number, lon: number): Promise<InsightsResponse> {
   const response = await fetch(`/api/insights?lat=${lat}&lon=${lon}`);
@@ -18,3 +18,21 @@ export function useIntelligence(lat: number | null, lon: number | null) {
     retry: 2,
   });
 }
+
+async function fetchZones(): Promise<ZoneData[]> {
+  const response = await fetch('/api/zones');
+  if (!response.ok) {
+    throw new Error('Failed to fetch zones');
+  }
+  return response.json();
+}
+
+export function useZones() {
+  return useQuery({
+    queryKey: ['zones'],
+    queryFn: fetchZones,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    retry: 2,
+  });
+}
+

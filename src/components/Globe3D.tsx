@@ -17,7 +17,8 @@ import {
 } from '@/lib/utils';
 import { airportService, type Airport } from '@/services/airportService';
 import { webcamService, type Webcam } from '@/services/webcamService';
-import { useIntelligence } from '@/hooks/useIntelligence';
+import { useIntelligence, useZones } from '@/hooks/useIntelligence';
+import { Skeleton } from '@/components/ui/skeleton';
 import IntelligencePanel from './IntelligencePanel';
 
 // Cesium Ion access token
@@ -69,6 +70,12 @@ const Globe3D = forwardRef<Globe3DRef, Globe3DProps>(
 
     // Intelligence Layer State
     const [selectedCoords, setSelectedCoords] = useState<{ lat: number; lon: number } | null>(null);
+    const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
+    const zoneEntities = useRef<Cesium.Entity[]>([]);
+
+    // Fetch zones
+    const { data: zonesData } = useZones();
+
     const { 
       data: intelligenceData, 
       isLoading: intelligenceLoading, 
@@ -146,6 +153,26 @@ const Globe3D = forwardRef<Globe3DRef, Globe3DProps>(
       }
     }, [intelligenceData, generateWeatherSummary]);
 
+    // Clear weatherPayload and weatherSummary on coordinate change
+    useEffect(() => {
+      if (selectedCoords) {
+        setWeatherPayload(null);
+        setWeatherSummary(null);
+      }
+    }, [selectedCoords]);
+
+    // Clear marker, summary, and payload on intelligenceError
+    useEffect(() => {
+      if (intelligenceError) {
+        if (locationMarker.current && viewer.current) {
+          viewer.current.entities.remove(locationMarker.current);
+          locationMarker.current = null;
+        }
+        setWeatherPayload(null);
+        setWeatherSummary(null);
+      }
+    }, [intelligenceError]);
+
     useEffect(() => {
       if (!cesiumContainer.current || viewer.current) return;
 
@@ -169,53 +196,6 @@ const Globe3D = forwardRef<Globe3DRef, Globe3DProps>(
 
       // 🏙️ Initial Labels Overlay (Optional/Static)
       // Note: We handle dynamic labels in the activeBasemap effect
-
-      // Track mouse movement for coordinates
-      const handler = new Cesium.ScreenSpaceEventHandler(viewer.current.scene.canvas);
-      handler.setInputAction((movement: any) => {
-        const cartesian = viewer.current!.camera.pickEllipsoid(
-          movement.endPosition,
-          viewer.current!.scene.globe.ellipsoid
-        );
-        if (cartesian) {
-          const cartographic = Cesium.Cartographic.fromCartesian(cartesian);
-          const lat = Cesium.Math.toDegrees(cartographic.latitude);
-          const lng = Cesium.Math.toDegrees(cartographic.longitude);
-          onCoordinatesChange(lat, lng);
-        }
-      }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
-
-      // Handle click to show weather
-      handler.setInputAction(async (click: any) => {
-        const cartesian = viewer.current!.camera.pickEllipsoid(
-          click.position,
-          viewer.current!.scene.globe.ellipsoid
-        );
-        if (cartesian) {
-          const cartographic = Cesium.Cartographic.fromCartesian(cartesian);
-          const lat = Cesium.Math.toDegrees(cartographic.latitude);
-          const lng = Cesium.Math.toDegrees(cartographic.longitude);
-
-          // Add marker at clicked location
-          if (locationMarker.current) {
-            viewer.current!.entities.remove(locationMarker.current);
-          }
-          locationMarker.current = viewer.current!.entities.add({
-            position: cartesian,
-            point: {
-              pixelSize: 10,
-              color: Cesium.Color.YELLOW,
-              outlineColor: Cesium.Color.WHITE,
-              outlineWidth: 2,
-            },
-          });
-
-          // Fetch and display weather via intelligence layer
-          setWeatherPanelOpen(true);
-          onWeatherPanelOpen?.();
-          setSelectedCoords({ lat, lon: lng });
-        }
-      }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
       return () => {
         if (viewer.current) {
@@ -252,17 +232,35 @@ const Globe3D = forwardRef<Globe3DRef, Globe3DProps>(
 
 
 
-    const closeWeatherPanel = () => {
-      setWeatherPanelOpen(false);
-      if (locationMarker.current && viewer.current) {
-        viewer.current.entities.remove(locationMarker.current);
-        locationMarker.current = null;
-      }
-      setSelectedCoords(null);
-    };
+
 
     const renderWeatherPanelContent = () => {
-      if (intelligenceLoading) return <div className="flex-1 flex items-center justify-center">Loading weather…</div>;
+      if (intelligenceLoading) {
+        return (
+          <div className="rounded-lg p-4 bg-white/5 border border-white/10 text-white h-full flex flex-col space-y-4">
+            <div className="flex items-center gap-3">
+              <Skeleton className="w-16 h-16 rounded-md bg-white/10" />
+              <div className="space-y-2 flex-1">
+                <Skeleton className="h-6 w-24 bg-white/10" />
+                <Skeleton className="h-4 w-32 bg-white/10" />
+              </div>
+            </div>
+            <div className="space-y-2 pt-2 border-t border-white/5">
+              <Skeleton className="h-10 w-full bg-white/10" />
+              <Skeleton className="h-10 w-full bg-white/10" />
+            </div>
+            <div className="space-y-1 pt-2">
+              <Skeleton className="h-4 w-1/3 bg-white/10" />
+              <div className="flex gap-2">
+                <Skeleton className="h-12 w-12 bg-white/10 rounded" />
+                <Skeleton className="h-12 w-12 bg-white/10 rounded" />
+                <Skeleton className="h-12 w-12 bg-white/10 rounded" />
+                <Skeleton className="h-12 w-12 bg-white/10 rounded" />
+              </div>
+            </div>
+          </div>
+        );
+      }
       if (intelligenceError) return <div className="flex-1 p-4 text-sm">Error: {(intelligenceError as any)?.message || "Failed to load weather"}</div>;
       if (!weatherPayload) return <div className="flex-1 p-4 text-sm">Click on the globe to load weather for a location.</div>;
 
@@ -678,31 +676,183 @@ const Globe3D = forwardRef<Globe3DRef, Globe3DProps>(
       };
     }, [showWebcams, viewer.current]);
 
-    // Handle Airport Clicks in 3D
+    // Consolidated ScreenSpaceEventHandlers for 3D Globe
     useEffect(() => {
       if (!viewer.current) return;
 
+      let lastHoveredEntity: Cesium.Entity | null = null;
       const handler = new Cesium.ScreenSpaceEventHandler(viewer.current.scene.canvas);
-      handler.setInputAction((click: any) => {
-        const pickedObject = viewer.current!.scene.pick(click.position);
-        if (Cesium.defined(pickedObject) && pickedObject.id) {
-          if (pickedObject.id.properties?.airportData) {
-            const airport = pickedObject.id.properties.airportData.getValue();
-            onAirportClick(airport);
-          } else if (pickedObject.id.properties?.webcamData) {
-            const webcam = pickedObject.id.properties.webcamData.getValue();
-            setSelectedWebcam(webcam);
-            setWeatherPanelOpen(false); // Close weather panel if webcam is clicked
+
+      // Track mouse movement for coordinates and zone hover highlights
+      handler.setInputAction((movement: any) => {
+        if (!viewer.current) return;
+
+        const cartesian = viewer.current.camera.pickEllipsoid(
+          movement.endPosition,
+          viewer.current.scene.globe.ellipsoid
+        );
+        if (cartesian) {
+          const cartographic = Cesium.Cartographic.fromCartesian(cartesian);
+          const lat = Cesium.Math.toDegrees(cartographic.latitude);
+          const lng = Cesium.Math.toDegrees(cartographic.longitude);
+          onCoordinatesChange(lat, lng);
+        }
+
+        // Hover effect for zones
+        const pickedObject = viewer.current.scene.pick(movement.endPosition);
+        if (Cesium.defined(pickedObject) && pickedObject.id && pickedObject.id.properties?.zoneData) {
+          const entity = pickedObject.id;
+          if (entity !== lastHoveredEntity) {
+            // Reset last hovered entity
+            if (lastHoveredEntity) {
+              const zone = lastHoveredEntity.properties.zoneData.getValue();
+              const isSelected = selectedZoneId === zone.id;
+              const color = isSelected
+                ? Cesium.Color.fromCssColorString('#f59e0b')
+                : Cesium.Color.fromCssColorString('#06b6d4');
+              
+              if (lastHoveredEntity.ellipse) {
+                lastHoveredEntity.ellipse.material = color.withAlpha(isSelected ? 0.3 : 0.15) as any;
+              } else if (lastHoveredEntity.polygon) {
+                lastHoveredEntity.polygon.material = color.withAlpha(isSelected ? 0.3 : 0.15) as any;
+              }
+            }
+            
+            // Set new hover style
+            const zone = entity.properties.zoneData.getValue();
+            const isSelected = selectedZoneId === zone.id;
+            const hoverColor = isSelected
+              ? Cesium.Color.fromCssColorString('#f59e0b')
+              : Cesium.Color.fromCssColorString('#06b6d4');
+            
+            if (entity.ellipse) {
+              entity.ellipse.material = hoverColor.withAlpha(isSelected ? 0.45 : 0.25) as any;
+            } else if (entity.polygon) {
+              entity.polygon.material = hoverColor.withAlpha(isSelected ? 0.45 : 0.25) as any;
+            }
+            lastHoveredEntity = entity;
           }
+        } else {
+          // Reset last hovered entity if we moved off it
+          if (lastHoveredEntity) {
+            const zone = lastHoveredEntity.properties.zoneData.getValue();
+            const isSelected = selectedZoneId === zone.id;
+            const color = isSelected
+              ? Cesium.Color.fromCssColorString('#f59e0b')
+              : Cesium.Color.fromCssColorString('#06b6d4');
+            
+            if (lastHoveredEntity.ellipse) {
+              lastHoveredEntity.ellipse.material = color.withAlpha(isSelected ? 0.3 : 0.15) as any;
+            } else if (lastHoveredEntity.polygon) {
+              lastHoveredEntity.polygon.material = color.withAlpha(isSelected ? 0.3 : 0.15) as any;
+            }
+            lastHoveredEntity = null;
+          }
+        }
+      }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+
+      // Handle consolidated LEFT_CLICK actions
+      handler.setInputAction(async (click: any) => {
+        if (!viewer.current) return;
+
+        const pickedObject = viewer.current.scene.pick(click.position);
+        if (Cesium.defined(pickedObject) && pickedObject.id) {
+          const entity = pickedObject.id;
+
+          // Airport Click
+          if (entity.properties?.airportData) {
+            const airport = entity.properties.airportData.getValue();
+            onAirportClick(airport);
+            return;
+          }
+
+          // Webcam Click
+          if (entity.properties?.webcamData) {
+            const webcam = entity.properties.webcamData.getValue();
+            setSelectedWebcam(webcam);
+            setWeatherPanelOpen(false);
+            return;
+          }
+
+          // Zone Click
+          if (entity.properties?.zoneData) {
+            const zone = entity.properties.zoneData.getValue();
+            setSelectedZoneId(zone.id);
+
+            const cartesian = viewer.current.camera.pickEllipsoid(
+              click.position,
+              viewer.current.scene.globe.ellipsoid
+            );
+            if (cartesian) {
+              const cartographic = Cesium.Cartographic.fromCartesian(cartesian);
+              const lat = Cesium.Math.toDegrees(cartographic.latitude);
+              const lng = Cesium.Math.toDegrees(cartographic.longitude);
+
+              if (locationMarker.current) {
+                viewer.current.entities.remove(locationMarker.current);
+              }
+              locationMarker.current = viewer.current.entities.add({
+                position: cartesian,
+                point: {
+                  pixelSize: 10,
+                  color: Cesium.Color.YELLOW,
+                  outlineColor: Cesium.Color.WHITE,
+                  outlineWidth: 2,
+                },
+              });
+
+              setSelectedCoords({ lat, lon: lng });
+              setWeatherPanelOpen(true);
+              onWeatherPanelOpen?.();
+            }
+            return;
+          }
+        }
+
+        // Fallback: Globe surface click
+        const cartesian = viewer.current.camera.pickEllipsoid(
+          click.position,
+          viewer.current.scene.globe.ellipsoid
+        );
+        if (cartesian) {
+          const cartographic = Cesium.Cartographic.fromCartesian(cartesian);
+          const lat = Cesium.Math.toDegrees(cartographic.latitude);
+          const lng = Cesium.Math.toDegrees(cartographic.longitude);
+
+          if (locationMarker.current) {
+            viewer.current.entities.remove(locationMarker.current);
+          }
+          locationMarker.current = viewer.current.entities.add({
+            position: cartesian,
+            point: {
+              pixelSize: 10,
+              color: Cesium.Color.YELLOW,
+              outlineColor: Cesium.Color.WHITE,
+              outlineWidth: 2,
+            },
+          });
+
+          setSelectedCoords({ lat, lon: lng });
+          setWeatherPanelOpen(true);
+          onWeatherPanelOpen?.();
         }
       }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
       return () => {
         handler.destroy();
       };
-    }, [onAirportClick]);
+    }, [viewer.current, onAirportClick, onWeatherPanelOpen, selectedZoneId]);
 
     // Expose methods via ref
+    function closeWeatherPanel() {
+      setWeatherPanelOpen(false);
+      if (locationMarker.current && viewer.current) {
+        viewer.current.entities.remove(locationMarker.current);
+        locationMarker.current = null;
+      }
+      setSelectedCoords(null);
+      setSelectedZoneId(null);
+    }
     useImperativeHandle(ref, () => ({
       flyTo: (lat: number, lng: number, zoom = 10) => {
         if (viewer.current) {
@@ -796,14 +946,132 @@ const Globe3D = forwardRef<Globe3DRef, Globe3DProps>(
           });
         }
       },
-      closeWeatherPanel: () => {
-        setWeatherPanelOpen(false);
-        if (locationMarker.current && viewer.current) {
-          viewer.current.entities.remove(locationMarker.current);
-          locationMarker.current = null;
+      closeWeatherPanel: closeWeatherPanel
+    }), [onWeatherPanelOpen, closeWeatherPanel]);
+
+    const handleZoneSelect = (zoneId: string) => {
+      setSelectedZoneId(zoneId);
+      if (!zonesData) return;
+      const zone = zonesData.find(z => z.id === zoneId);
+      if (!zone) return;
+
+      let targetLat = zone.centerLat;
+      let targetLon = zone.centerLon;
+
+      if (targetLat === null || targetLon === null) {
+        if (zone.polygon) {
+          try {
+            const geoJsonData = JSON.parse(zone.polygon);
+            if (geoJsonData.type === "Polygon" && geoJsonData.coordinates) {
+              const coords = geoJsonData.coordinates[0];
+              let sumLat = 0;
+              let sumLon = 0;
+              coords.forEach((coord: number[]) => {
+                sumLon += coord[0];
+                sumLat += coord[1];
+              });
+              targetLat = sumLat / coords.length;
+              targetLon = sumLon / coords.length;
+            }
+          } catch (e) {
+            console.error("Failed to compute centroid for zone", zone.name, e);
+          }
         }
       }
-    }), [onWeatherPanelOpen]);
+
+      if (targetLat !== null && targetLon !== null && viewer.current) {
+        viewer.current.camera.flyTo({
+          destination: Cesium.Cartesian3.fromDegrees(targetLon, targetLat, 50000),
+          duration: 2,
+        });
+
+        const cartesian = Cesium.Cartesian3.fromDegrees(targetLon, targetLat);
+        if (locationMarker.current) {
+          viewer.current.entities.remove(locationMarker.current);
+        }
+        locationMarker.current = viewer.current.entities.add({
+          position: cartesian,
+          point: {
+            pixelSize: 10,
+            color: Cesium.Color.YELLOW,
+            outlineColor: Cesium.Color.WHITE,
+            outlineWidth: 2,
+          },
+        });
+
+        setSelectedCoords({ lat: targetLat, lon: targetLon });
+        setWeatherPanelOpen(true);
+        onWeatherPanelOpen?.();
+      }
+    };
+
+    // Render zones on the 3D globe
+    useEffect(() => {
+      if (!viewer.current || !zonesData) return;
+
+      zoneEntities.current.forEach(entity => viewer.current?.entities.remove(entity));
+      zoneEntities.current = [];
+
+      zonesData.forEach((zone) => {
+        if (!zone.isActive) return;
+
+        const isSelected = selectedZoneId === zone.id;
+        const color = isSelected
+          ? Cesium.Color.fromCssColorString('#f59e0b')
+          : Cesium.Color.fromCssColorString('#06b6d4');
+        
+        let entity: Cesium.Entity | null = null;
+
+        if (zone.type === 'circle' && zone.centerLat !== null && zone.centerLon !== null && zone.radiusKm !== null) {
+          entity = viewer.current!.entities.add({
+            position: Cesium.Cartesian3.fromDegrees(zone.centerLon, zone.centerLat),
+            ellipse: {
+              semiMajorAxis: zone.radiusKm * 1000,
+              semiMinorAxis: zone.radiusKm * 1000,
+              material: color.withAlpha(isSelected ? 0.3 : 0.15),
+              outline: true,
+              outlineColor: color,
+              outlineWidth: isSelected ? 3 : 2,
+            },
+            properties: {
+              zoneData: zone
+            }
+          } as any);
+        } else if (zone.type === 'polygon' && zone.polygon) {
+          try {
+            const geoJsonData = JSON.parse(zone.polygon);
+            if (geoJsonData.type === 'Polygon' && geoJsonData.coordinates) {
+              const coords = geoJsonData.coordinates[0].flatMap((c: number[]) => [c[0], c[1]]);
+              entity = viewer.current!.entities.add({
+                polygon: {
+                  hierarchy: Cesium.Cartesian3.fromDegreesArray(coords),
+                  material: color.withAlpha(isSelected ? 0.3 : 0.15),
+                  outline: true,
+                  outlineColor: color,
+                  outlineWidth: isSelected ? 3 : 2,
+                },
+                properties: {
+                  zoneData: zone
+                }
+              } as any);
+            }
+          } catch (e) {
+            console.error("Failed to parse polygon GeoJSON for Cesium zone", zone.name, e);
+          }
+        }
+
+        if (entity) {
+          zoneEntities.current.push(entity);
+        }
+      });
+
+      return () => {
+        zoneEntities.current.forEach(entity => viewer.current?.entities.remove(entity));
+        zoneEntities.current = [];
+      };
+    }, [viewer.current, zonesData, selectedZoneId]);
+
+
 
     return (
       <div className="relative w-full h-full">
@@ -829,7 +1097,9 @@ const Globe3D = forwardRef<Globe3DRef, Globe3DProps>(
               <div className="flex flex-col">
                 <span className="text-[10px] uppercase tracking-widest text-white/40 font-bold">Location Intelligence</span>
                 <span className="text-sm font-bold text-white truncate max-w-[200px]">
-                  {weatherPayload?.current?.name || "Global Monitoring"}
+                  {intelligenceLoading && selectedCoords 
+                    ? `Loading (${selectedCoords.lat.toFixed(4)}, ${selectedCoords.lon.toFixed(4)})...` 
+                    : (weatherPayload?.current?.name || "Global Monitoring")}
                 </span>
               </div>
               <button onClick={closeWeatherPanel} aria-label="Close panel" className="p-2 rounded-full hover:bg-white/10 text-white/60 hover:text-white transition-all">
@@ -847,6 +1117,8 @@ const Globe3D = forwardRef<Globe3DRef, Globe3DProps>(
                 error={intelligenceError ? (intelligenceError as Error).message : null}
                 onRetry={refetchIntelligence}
                 renderWeather={renderWeatherPanelContent}
+                selectedZoneId={selectedZoneId}
+                onZoneSelect={handleZoneSelect}
               />
             </div>
           </div>

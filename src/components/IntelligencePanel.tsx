@@ -30,6 +30,8 @@ interface IntelligencePanelProps {
   error: string | null;
   onRetry: () => void;
   renderWeather: () => React.ReactNode;
+  selectedZoneId?: string | null;
+  onZoneSelect?: (zoneId: string) => void;
 }
 
 const severityConfig: Record<Severity, { color: string; icon: any }> = {
@@ -129,9 +131,44 @@ const IntelligencePanel: React.FC<IntelligencePanelProps> = ({
   error,
   onRetry,
   renderWeather,
+  selectedZoneId,
+  onZoneSelect,
 }) => {
   const { state } = useSettings();
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
+
+  // Unified Service Connection Failure Render
+  if (error) {
+    return (
+      <div className="p-4 h-full flex flex-col justify-center select-none">
+        <Card className="bg-red-500/10 border-red-500/50 text-white shadow-[0_0_20px_rgba(239,68,68,0.15)] rounded-xl">
+          <CardHeader className="p-4 pb-2">
+            <CardTitle className="text-base font-bold flex items-center gap-2 text-red-400">
+              <AlertCircle size={18} />
+              Service Connection Failed
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-4 pt-0 space-y-4">
+            <p className="text-xs text-white/70 leading-relaxed">
+              We encountered an issue retrieving weather intelligence for this location. The server might be unreachable or returned an internal error.
+            </p>
+            {error && (
+              <div className="p-2.5 bg-black/35 rounded-lg border border-white/5 font-mono text-[10px] text-red-300 break-all max-h-24 overflow-y-auto">
+                Details: {error}
+              </div>
+            )}
+            <button
+              onClick={onRetry}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-white/10 hover:bg-white/20 active:bg-white/5 border border-white/10 rounded-lg transition-all text-xs font-semibold text-white"
+            >
+              <RefreshCw size={12} className="animate-spin-once" />
+              Retry Connection
+            </button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   // Group forecast by day (calendar date in local context)
   const groupForecastByDay = () => {
@@ -246,25 +283,6 @@ const IntelligencePanel: React.FC<IntelligencePanelProps> = ({
         <TabsContent value="intelligence" className="p-4 m-0 space-y-6 focus-visible:ring-0">
           {loading ? (
             <IntelligenceSkeleton />
-          ) : error ? (
-            <Card className="bg-red-500/10 border-red-500/50 text-white">
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <AlertCircle className="text-red-400" />
-                  Fetch Error
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <p className="text-sm opacity-90">{error}</p>
-                <button
-                  onClick={onRetry}
-                  className="flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 rounded-md transition-colors text-sm font-medium"
-                >
-                  <RefreshCw size={14} />
-                  Retry
-                </button>
-              </CardContent>
-            </Card>
           ) : (
             <>
               {/* Overall Status Card */}
@@ -300,10 +318,14 @@ const IntelligencePanel: React.FC<IntelligencePanelProps> = ({
                 ) : (
                   insights.map((insight, idx) => {
                     const Config = severityConfig[insight.severity];
+                    const isHighlighted = selectedZoneId && insight.zoneId === selectedZoneId;
                     return (
                       <Card 
                         key={idx} 
-                        className="bg-white/5 border-white/10 hover:bg-white/10 transition-colors duration-200 group"
+                        className={cn(
+                          "bg-white/5 border-white/10 hover:bg-white/10 transition-colors duration-200 group",
+                          isHighlighted && "border-amber-500/50 bg-amber-500/10 shadow-[0_0_15px_rgba(245,158,11,0.2)] ring-1 ring-amber-500/30 scale-[1.01] hover:bg-amber-500/15"
+                        )}
                       >
                         <CardHeader className="p-4 pb-2 space-y-2">
                           <div className="flex items-center justify-between">
@@ -346,23 +368,33 @@ const IntelligencePanel: React.FC<IntelligencePanelProps> = ({
                   {zones.length === 0 ? (
                     <p className="text-xs text-white/30 px-1 italic">Outside defined zones</p>
                   ) : (
-                    zones.map((zone, idx) => (
-                      <div 
-                        key={idx} 
-                        className="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/5 hover:border-white/20 transition-all"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="w-2.5 h-2.5 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.6)]" />
-                          <div>
-                            <p className="text-sm font-semibold text-white">{zone.name}</p>
-                            <p className="text-[10px] text-white/40 uppercase tracking-wider">{zone.type}</p>
+                    zones.map((zone, idx) => {
+                      const isHighlighted = selectedZoneId && zone.id === selectedZoneId;
+                      return (
+                        <div 
+                          key={idx} 
+                          onClick={() => onZoneSelect?.(zone.id)}
+                          className={cn(
+                            "flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/5 hover:border-white/20 transition-all cursor-pointer hover:bg-white/10 active:scale-[0.99]",
+                            isHighlighted && "border-amber-500/50 bg-amber-500/10 shadow-[0_0_10px_rgba(245,158,11,0.15)] ring-1 ring-amber-500/30 hover:bg-amber-500/15"
+                          )}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className={cn(
+                              "w-2.5 h-2.5 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.6)] transition-all duration-300",
+                              isHighlighted && "bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.7)]"
+                            )} />
+                            <div>
+                              <p className="text-sm font-semibold text-white">{zone.name}</p>
+                              <p className="text-[10px] text-white/40 uppercase tracking-wider">{zone.type}</p>
+                            </div>
                           </div>
+                          <Badge variant="secondary" className="bg-white/10 text-white/80 text-[10px] font-semibold border border-white/5">
+                            {zone.insightCount} Alerts
+                          </Badge>
                         </div>
-                        <Badge variant="secondary" className="bg-white/10 text-white/80 text-[10px] font-semibold border border-white/5">
-                          {zone.insightCount} Alerts
-                        </Badge>
-                      </div>
-                    ))
+                      );
+                    })
                   )}
                 </div>
               </section>

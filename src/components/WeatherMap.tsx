@@ -30,8 +30,9 @@ import {
 } from "@/lib/utils";
 import { airportService, type Airport } from "@/services/airportService";
 import { webcamService, type Webcam } from "@/services/webcamService";
-import { useIntelligence } from "@/hooks/useIntelligence";
+import { useIntelligence, useZones } from "@/hooks/useIntelligence";
 import IntelligencePanel from "./IntelligencePanel";
+import { Skeleton } from "@/components/ui/skeleton";
 
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -148,6 +149,12 @@ const WeatherMap = forwardRef<WeatherMapRef, WeatherMapProps>(
     
     // Intelligence Layer State
     const [selectedCoords, setSelectedCoords] = useState<{ lat: number; lon: number } | null>(null);
+    const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
+    const zoneLayers = useRef<L.LayerGroup | null>(null);
+
+    // Fetch zones
+    const { data: zonesData } = useZones();
+
     const { 
       data: intelligenceData, 
       isLoading: intelligenceLoading, 
@@ -184,6 +191,26 @@ const WeatherMap = forwardRef<WeatherMapRef, WeatherMapProps>(
         generateSummary();
       }
     }, [intelligenceData, generateWeatherSummary]);
+
+    // Clear weatherPayload and weatherSummary on coordinate change
+    useEffect(() => {
+      if (selectedCoords) {
+        setWeatherPayload(null);
+        setWeatherSummary(null);
+      }
+    }, [selectedCoords]);
+
+    // Clear marker, summary, and payload on intelligenceError
+    useEffect(() => {
+      if (intelligenceError) {
+        if (locationMarker.current) {
+          locationMarker.current.remove();
+          locationMarker.current = null;
+        }
+        setWeatherPayload(null);
+        setWeatherSummary(null);
+      }
+    }, [intelligenceError]);
 
     const degToCompass = (deg: number) => {
       const val = Math.floor((deg / 22.5) + 0.5);
@@ -284,8 +311,7 @@ const WeatherMap = forwardRef<WeatherMapRef, WeatherMapProps>(
         }
       },
       closeWeatherPanel: () => {
-        setWeatherPanelOpen(false);
-        if (locationMarker.current) locationMarker.current.remove();
+        closeWeatherPanel();
       }
     }), [cancelMeasurement, toast, geolocation, onWeatherPanelOpen]);
 
@@ -791,6 +817,147 @@ const WeatherMap = forwardRef<WeatherMapRef, WeatherMapProps>(
 
 
 
+    const handleZoneSelect = (zoneId: string) => {
+      setSelectedZoneId(zoneId);
+      if (!zonesData) return;
+      const zone = zonesData.find(z => z.id === zoneId);
+      if (!zone) return;
+
+      let targetLat = zone.centerLat;
+      let targetLon = zone.centerLon;
+
+      if (targetLat === null || targetLon === null) {
+        if (zone.polygon) {
+          try {
+            const geoJsonData = JSON.parse(zone.polygon);
+            if (geoJsonData.type === "Polygon" && geoJsonData.coordinates) {
+              const coords = geoJsonData.coordinates[0];
+              let sumLat = 0;
+              let sumLon = 0;
+              coords.forEach((coord: number[]) => {
+                sumLon += coord[0];
+                sumLat += coord[1];
+              });
+              targetLat = sumLat / coords.length;
+              targetLon = sumLon / coords.length;
+            }
+          } catch (e) {
+            console.error("Failed to compute centroid for zone", zone.name, e);
+          }
+        }
+      }
+
+      if (targetLat !== null && targetLon !== null) {
+        map.current?.flyTo([targetLat, targetLon], 13, { animate: true, duration: 1.2 });
+        if (locationMarker.current) locationMarker.current.remove();
+        locationMarker.current = L.marker([targetLat, targetLon]).addTo(map.current!);
+        setSelectedCoords({ lat: targetLat, lon: targetLon });
+        setWeatherPanelOpen(true);
+        onWeatherPanelOpen?.();
+      }
+    };
+
+    // Manage Zone layers on the map
+    useEffect(() => {
+      if (!map.current || !mapReady) return;
+
+      if (!zoneLayers.current) {
+        zoneLayers.current = L.layerGroup().addTo(map.current);
+      }
+
+      zoneLayers.current.clearLayers();
+
+      if (!zonesData) return;
+
+      zonesData.forEach((zone) => {
+        if (!zone.isActive) return;
+
+        const isSelected = selectedZoneId === zone.id;
+        let layer: L.Layer | null = null;
+
+        const normalStyle: L.PathOptions = {
+          color: "#06b6d4",
+          dashArray: "5, 5",
+          weight: 2,
+          fillColor: "#06b6d4",
+          fillOpacity: 0.15,
+        };
+
+        const selectedStyle: L.PathOptions = {
+          color: "#f59e0b",
+          dashArray: undefined,
+          weight: 3,
+          fillColor: "#f59e0b",
+          fillOpacity: 0.3,
+        };
+
+        const currentStyle = isSelected ? selectedStyle : normalStyle;
+
+        if (zone.type === "circle" && zone.centerLat !== null && zone.centerLon !== null && zone.radiusKm !== null) {
+          layer = L.circle([zone.centerLat, zone.centerLon], {
+            radius: zone.radiusKm * 1000,
+            ...currentStyle,
+          });
+        } else if (zone.type === "polygon" && zone.polygon) {
+          try {
+            const geoJsonData = JSON.parse(zone.polygon);
+            layer = L.geoJSON(geoJsonData, {
+              style: () => currentStyle,
+            });
+          } catch (e) {
+            console.error("Failed to parse polygon GeoJSON for zone", zone.name, e);
+          }
+        }
+
+        if (layer) {
+          layer.on("click", (e: L.LeafletMouseEvent) => {
+            L.DomEvent.stopPropagation(e);
+            setSelectedZoneId(zone.id);
+            const clickLat = e.latlng.lat;
+            const clickLon = e.latlng.lng;
+            if (locationMarker.current) locationMarker.current.remove();
+            locationMarker.current = L.marker([clickLat, clickLon]).addTo(map.current!);
+            setSelectedCoords({ lat: clickLat, lon: clickLon });
+            setWeatherPanelOpen(true);
+            onWeatherPanelOpen?.();
+          });
+
+          layer.on("mouseover", (e: L.LeafletMouseEvent) => {
+            const hoverStyle = isSelected 
+              ? { fillOpacity: 0.4, weight: 4 }
+              : { fillOpacity: 0.25, weight: 3 };
+            if (layer instanceof L.Path) {
+              layer.setStyle(hoverStyle);
+            } else if (layer instanceof L.FeatureGroup) {
+              layer.setStyle(hoverStyle);
+            }
+          });
+
+          layer.on("mouseout", (e: L.LeafletMouseEvent) => {
+            if (layer instanceof L.Path) {
+              layer.setStyle(currentStyle);
+            } else if (layer instanceof L.FeatureGroup) {
+              layer.setStyle(currentStyle);
+            }
+          });
+
+          layer.bindTooltip(zone.name, {
+            permanent: false,
+            direction: "top",
+            opacity: 0.9,
+          });
+
+          layer.addTo(zoneLayers.current!);
+        }
+      });
+
+      return () => {
+        if (zoneLayers.current) {
+          zoneLayers.current.clearLayers();
+        }
+      };
+    }, [mapReady, zonesData, selectedZoneId]);
+
     const closeWeatherPanel = () => {
       setWeatherPanelOpen(false);
       // Optionally remove the location marker when closing
@@ -805,10 +972,36 @@ const WeatherMap = forwardRef<WeatherMapRef, WeatherMapProps>(
       }
       setWeatherPayload(null);
       setSelectedCoords(null);
+      setSelectedZoneId(null);
     };
 
     const renderWeatherPanelContent = () => {
-      if (intelligenceLoading) return <div className="flex-1 flex items-center justify-center">Loading weather…</div>;
+      if (intelligenceLoading) {
+        return (
+          <div className="rounded-lg p-4 bg-white/5 border border-white/10 text-white h-full flex flex-col space-y-4">
+            <div className="flex items-center gap-3">
+              <Skeleton className="w-16 h-16 rounded-md bg-white/10" />
+              <div className="space-y-2 flex-1">
+                <Skeleton className="h-6 w-24 bg-white/10" />
+                <Skeleton className="h-4 w-32 bg-white/10" />
+              </div>
+            </div>
+            <div className="space-y-2 pt-2 border-t border-white/5">
+              <Skeleton className="h-10 w-full bg-white/10" />
+              <Skeleton className="h-10 w-full bg-white/10" />
+            </div>
+            <div className="space-y-1 pt-2">
+              <Skeleton className="h-4 w-1/3 bg-white/10" />
+              <div className="flex gap-2">
+                <Skeleton className="h-12 w-12 bg-white/10 rounded" />
+                <Skeleton className="h-12 w-12 bg-white/10 rounded" />
+                <Skeleton className="h-12 w-12 bg-white/10 rounded" />
+                <Skeleton className="h-12 w-12 bg-white/10 rounded" />
+              </div>
+            </div>
+          </div>
+        );
+      }
       if (intelligenceError) return <div className="flex-1 p-4 text-sm">Error: {(intelligenceError as any)?.message || "Failed to load weather"}</div>;
       if (!weatherPayload) return <div className="flex-1 p-4 text-sm">Click on the map to load weather for a location.</div>;
 
@@ -973,7 +1166,9 @@ const WeatherMap = forwardRef<WeatherMapRef, WeatherMapProps>(
               <div className="flex flex-col">
                 <span className="text-[10px] uppercase tracking-widest text-white/40 font-bold">Location Intelligence</span>
                 <span className="text-sm font-bold text-white truncate max-w-[200px]">
-                  {weatherPayload?.current?.name || "Global Monitoring"}
+                  {intelligenceLoading && selectedCoords 
+                    ? `Loading (${selectedCoords.lat.toFixed(4)}, ${selectedCoords.lon.toFixed(4)})...` 
+                    : (weatherPayload?.current?.name || "Global Monitoring")}
                 </span>
               </div>
               <button onClick={closeWeatherPanel} aria-label="Close panel" className="p-2 rounded-full hover:bg-white/10 text-white/60 hover:text-white transition-all">
@@ -991,6 +1186,8 @@ const WeatherMap = forwardRef<WeatherMapRef, WeatherMapProps>(
                 error={intelligenceError ? (intelligenceError as Error).message : null}
                 onRetry={refetchIntelligence}
                 renderWeather={renderWeatherPanelContent}
+                selectedZoneId={selectedZoneId}
+                onZoneSelect={handleZoneSelect}
               />
             </div>
           </div>
