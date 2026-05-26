@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import axios from 'axios';
+import { z } from 'zod';
 import { extractSignals } from './engine/signals';
 import { defaultRules } from './engine/rules';
 import { evaluate } from './engine/evaluator';
@@ -12,13 +13,12 @@ import zonesRouter from './routes/zones';
 import { PrismaClient } from './generated/prisma';
 import type { RiskRule, ZoneSummary } from './engine/types';
 
-const prisma = new PrismaClient();
-
 dotenv.config();
 
 const app = express();
 const port = process.env.PORT || 3001;
 const OPENWEATHER_KEY = process.env.OPENWEATHER_KEY;
+const prisma = new PrismaClient();
 
 if (!OPENWEATHER_KEY) {
   console.error('❌ OPENWEATHER_KEY is not set in .env');
@@ -28,187 +28,163 @@ if (!OPENWEATHER_KEY) {
 app.use(cors());
 app.use(express.json());
 
-// Mount CRUD routers
-app.use('/api/rules', rulesRouter);
-app.use('/api/zones', zonesRouter);
+// In‑memory cache for insights
+const insightsCache = new Map<string, { data: any; expires: number }>();
 
-// ─── Health Check ────────────────────────────────────────────────
-app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', service: 'caelus-intelligence-layer', timestamp: new Date().toISOString() });
-});
-
-// ─── GET /api/weather ────────────────────────────────────────────
-// Proxies current weather data from OpenWeather
+// Updated error response format
+// Weather endpoint
 app.get('/api/weather', async (req, res) => {
   const { lat, lon, units = 'metric' } = req.query;
-
   if (!lat || !lon) {
-    return res.status(400).json({ error: 'lat and lon query parameters are required' });
+    return res.status(400).json({ error: { code: 'MISSING_PARAMS', message: 'lat and lon query parameters are required' } });
   }
-
   try {
-    const response = await axios.get(
-      `https://api.openweathermap.org/data/2.5/weather`,
-      { params: { lat, lon, units, appid: OPENWEATHER_KEY } }
-    );
+    const response = await axios.get('https://api.openweathermap.org/data/2.5/weather', {
+      params: { lat, lon, units, appid: OPENWEATHER_KEY },
+    });
     res.json(response.data);
   } catch (error: any) {
     console.error('Error fetching weather:', error.message);
     res.status(error.response?.status || 500).json({
-      error: 'Failed to fetch weather data',
+      error: { code: 'WEATHER_FETCH_ERROR', message: 'Failed to fetch weather data' },
       details: error.response?.data?.message || error.message,
     });
   }
 });
 
-// ─── GET /api/forecast ───────────────────────────────────────────
-// Proxies 5-day / 3-hour forecast from OpenWeather
+// Forecast endpoint
 app.get('/api/forecast', async (req, res) => {
   const { lat, lon, units = 'metric' } = req.query;
-
   if (!lat || !lon) {
-    return res.status(400).json({ error: 'lat and lon query parameters are required' });
+    return res.status(400).json({ error: { code: 'MISSING_PARAMS', message: 'lat and lon query parameters are required' } });
   }
-
   try {
-    const response = await axios.get(
-      `https://api.openweathermap.org/data/2.5/forecast`,
-      { params: { lat, lon, units, appid: OPENWEATHER_KEY } }
-    );
+    const response = await axios.get('https://api.openweathermap.org/data/2.5/forecast', {
+      params: { lat, lon, units, appid: OPENWEATHER_KEY },
+    });
     res.json(response.data);
   } catch (error: any) {
     console.error('Error fetching forecast:', error.message);
     res.status(error.response?.status || 500).json({
-      error: 'Failed to fetch forecast data',
+      error: { code: 'FORECAST_FETCH_ERROR', message: 'Failed to fetch forecast data' },
       details: error.response?.data?.message || error.message,
     });
   }
 });
 
-// ─── GET /api/air-quality ────────────────────────────────────────
-// Proxies air pollution data from OpenWeather
+// Air Quality endpoint
 app.get('/api/air-quality', async (req, res) => {
   const { lat, lon } = req.query;
-
   if (!lat || !lon) {
-    return res.status(400).json({ error: 'lat and lon query parameters are required' });
+    return res.status(400).json({ error: { code: 'MISSING_PARAMS', message: 'lat and lon query parameters are required' } });
   }
-
   try {
-    const response = await axios.get(
-      `https://api.openweathermap.org/data/2.5/air_pollution`,
-      { params: { lat, lon, appid: OPENWEATHER_KEY } }
-    );
+    const response = await axios.get('https://api.openweathermap.org/data/2.5/air_pollution', {
+      params: { lat, lon, appid: OPENWEATHER_KEY },
+    });
     res.json(response.data);
   } catch (error: any) {
     console.error('Error fetching air quality:', error.message);
     res.status(error.response?.status || 500).json({
-      error: 'Failed to fetch air quality data',
+      error: { code: 'AIR_QUALITY_FETCH_ERROR', message: 'Failed to fetch air quality data' },
       details: error.response?.data?.message || error.message,
     });
   }
 });
 
-// ─── GET /api/tiles/:layer/:z/:x/:y ─────────────────────────────
-// Proxies OpenWeather map tiles (removes API key exposure on frontend)
+// Tile endpoint (proxy OpenWeather map tiles)
 app.get('/api/tiles/:layer/:z/:x/:y', async (req, res) => {
   const { layer, z, x, y } = req.params;
-
   try {
-    const response = await axios.get(
-      `https://tile.openweathermap.org/map/${layer}/${z}/${x}/${y}.png`,
-      {
-        params: { appid: OPENWEATHER_KEY },
-        responseType: 'arraybuffer',
-      }
-    );
+    const response = await axios.get(`https://tile.openweathermap.org/map/${layer}/${z}/${x}/${y}.png`, {
+      params: { appid: OPENWEATHER_KEY },
+      responseType: 'arraybuffer',
+    });
     res.set('Content-Type', 'image/png');
-    res.set('Cache-Control', 'public, max-age=600'); // Cache tiles for 10 min
+    res.set('Cache-Control', 'public, max-age=600'); // cache 10 min
     res.send(response.data);
   } catch (error: any) {
     console.error('Error fetching tile:', error.message);
     res.status(error.response?.status || 500).json({
-      error: 'Failed to fetch map tile',
+      error: { code: 'TILE_FETCH_ERROR', message: 'Failed to fetch map tile' },
+      details: error.response?.data?.message || error.message,
     });
   }
 });
 
-// ─── GET /api/insights ───────────────────────────────────────────
-// Combined endpoint: returns weather + forecast + air quality + zone-aware insights
+// Mount CRUD routers
+app.use('/api/rules', rulesRouter);
+app.use('/api/zones', zonesRouter);
+
+// Health check
+app.get('/api/health', (_req, res) => {
+  res.json({ status: 'ok', service: 'caelus-intelligence-layer', timestamp: new Date().toISOString() });
+});
+
+// Insights endpoint – combines weather, forecast, air quality and zone‑aware rule evaluation
 app.get('/api/insights', async (req, res) => {
-  const { lat, lon, units = 'metric' } = req.query;
-
-  if (!lat || !lon) {
-    return res.status(400).json({ error: 'lat and lon query parameters are required' });
+  const schema = z.object({
+    lat: z.coerce.number().min(-90, { message: 'Latitude must be >= -90' }).max(90, { message: 'Latitude must be <= 90' }),
+    lon: z.coerce.number().min(-180, { message: 'Longitude must be >= -180' }).max(180, { message: 'Longitude must be <= 180' }),
+    units: z.enum(['metric', 'imperial']).default('metric'),
+    force: z.preprocess((v) => (v === 'true' ? true : false), z.boolean()).optional(),
+  });
+  const parseResult = schema.safeParse(req.query);
+  if (!parseResult.success) {
+    return res.status(400).json({
+      error: { code: 'INVALID_PARAMS', message: parseResult.error.errors.map(e => e.message).join('; ') },
+    });
   }
-
+  const { lat, lon, units, force } = parseResult.data;
+  const cacheKey = `${lat}-${lon}-${units}`;
+  if (!force && insightsCache.has(cacheKey)) {
+    const cached = insightsCache.get(cacheKey)!;
+    if (Date.now() < cached.expires) {
+      return res.json(cached.data);
+    }
+    insightsCache.delete(cacheKey);
+  }
   try {
-    // Fetch weather data and find matching zones in parallel
     const [weatherRes, forecastRes, airRes, matchingZones] = await Promise.all([
-      axios.get('https://api.openweathermap.org/data/2.5/weather', {
-        params: { lat, lon, units, appid: OPENWEATHER_KEY },
-      }),
-      axios.get('https://api.openweathermap.org/data/2.5/forecast', {
-        params: { lat, lon, units, appid: OPENWEATHER_KEY },
-      }),
-      axios.get('https://api.openweathermap.org/data/2.5/air_pollution', {
-        params: { lat, lon, appid: OPENWEATHER_KEY },
-      }),
+      axios.get('https://api.openweathermap.org/data/2.5/weather', { params: { lat, lon, units, appid: OPENWEATHER_KEY } }),
+      axios.get('https://api.openweathermap.org/data/2.5/forecast', { params: { lat, lon, units, appid: OPENWEATHER_KEY } }),
+      axios.get('https://api.openweathermap.org/data/2.5/air_pollution', { params: { lat, lon, appid: OPENWEATHER_KEY } }),
       findZonesContainingPoint(Number(lat), Number(lon)),
     ]);
-
     const signals = extractSignals(weatherRes.data, forecastRes.data, airRes.data);
-    
-    // Fetch global rules from database
+    // Ensure baseline rules exist
     let dbRules = await prisma.rule.findMany();
-    
-    // Seed default rules if database is empty
     if (dbRules.length === 0) {
-      console.log('Seeding default rules into the database...');
-      await prisma.rule.createMany({
-        data: defaultRules.map(rule => ({
-          name: rule.name,
-          signal: rule.signal,
-          operator: rule.operator,
-          threshold: rule.threshold,
-          severity: rule.severity,
-          message: rule.message,
-          category: rule.category,
-        })),
-      });
+      await prisma.rule.createMany({ data: defaultRules.map(r => ({
+        name: r.name,
+        signal: r.signal,
+        operator: r.operator,
+        threshold: r.threshold,
+        severity: r.severity,
+        message: r.message,
+        category: r.category,
+      })) });
       dbRules = await prisma.rule.findMany();
     }
-
-    // Evaluate global rules (no zone tag)
     const globalInsights = evaluate(signals, dbRules as any);
-
-    // Evaluate zone-specific rules
     const zoneSummaries: ZoneSummary[] = [];
     const zoneInsights: typeof globalInsights = [];
-
     if (matchingZones.length > 0) {
-      // Fetch zone rules for all matching zones
       const zoneRules = await prisma.zoneRule.findMany({
-        where: {
-          zoneId: { in: matchingZones.map(z => z.id) },
-        },
+        where: { zoneId: { in: matchingZones.map(z => z.id) } },
         include: { rule: true, zone: true },
       });
-
-      // Evaluate zone-specific rules
       for (const zr of zoneRules) {
-        const rule = zr.rule;
         const ruleForEval: RiskRule = {
-          id: rule.id,
-          name: rule.name,
-          signal: rule.signal as any,
-          operator: rule.operator as any,
-          threshold: zr.thresholdOverride ?? rule.threshold,
-          severity: rule.severity as any,
-          message: rule.message,
-          category: rule.category as any,
+          id: zr.rule.id,
+          name: zr.rule.name,
+          signal: zr.rule.signal as any,
+          operator: zr.rule.operator as any,
+          threshold: zr.thresholdOverride ?? zr.rule.threshold,
+          severity: zr.rule.severity as any,
+          message: zr.rule.message,
+          category: zr.rule.category as any,
         };
-
         const zoneResult = evaluate(signals, [ruleForEval]);
         zoneResult.forEach(insight => {
           insight.zoneName = zr.zone.name;
@@ -216,8 +192,6 @@ app.get('/api/insights', async (req, res) => {
         });
         zoneInsights.push(...zoneResult);
       }
-
-      // Build zone summaries
       for (const zone of matchingZones) {
         zoneSummaries.push({
           id: zone.id,
@@ -227,33 +201,30 @@ app.get('/api/insights', async (req, res) => {
         });
       }
     }
-
-    // Merge: zone insights first (they're location-specific), then global
     const allInsights = [...zoneInsights, ...globalInsights];
-
-    res.json({
+    const responsePayload = {
       current: weatherRes.data,
       forecast: forecastRes.data,
       airQuality: airRes.data,
-      signals: signals,
+      signals,
       insights: allInsights,
       zones: zoneSummaries,
-    });
+    };
+    insightsCache.set(cacheKey, { data: responsePayload, expires: Date.now() + 5 * 60 * 1000 });
+    return res.json(responsePayload);
   } catch (error: any) {
-    console.error('Error fetching insights:', error.message);
-    res.status(error.response?.status || 500).json({
-      error: 'Failed to fetch insights data',
-      details: error.response?.data?.message || error.message,
+    const status = error.response?.status || 500;
+    const details = error.response?.data?.message || error.message;
+    return res.status(status).json({
+      error: { code: 'INSIGHTS_FETCH_ERROR', message: 'Failed to fetch insights data', details },
     });
   }
 });
 
-// ─── Start Server ────────────────────────────────────────────────
+// Start server
 async function startServer() {
-  // Enable PostGIS extension
   await ensurePostGIS();
-
-  // Seed default zones if table is empty
+  // Seed default zones if none exist
   const zoneCount = await prisma.zone.count();
   if (zoneCount === 0) {
     console.log('   Seeding default zones...');
@@ -262,17 +233,16 @@ async function startServer() {
     }
     console.log(`   Seeded ${defaultZones.length} default zones.`);
   }
-
   app.listen(port, () => {
     console.log(`\n🧠 CAELUS Intelligence Layer running on http://localhost:${port}`);
     console.log(`   Health check: http://localhost:${port}/api/health`);
-    console.log(`   Weather:      http://localhost:${port}/api/weather?lat=6.5&lon=3.4`);
-    console.log(`   Insights:     http://localhost:${port}/api/insights?lat=6.5&lon=3.4`);
-    console.log(`   Zones:        http://localhost:${port}/api/zones\n`);
+    console.log(`   Weather: http://localhost:${port}/api/weather?lat=6.5&lon=3.4`);
+    console.log(`   Insights: http://localhost:${port}/api/insights?lat=6.5&lon=3.4`);
+    console.log(`   Zones: http://localhost:${port}/api/zones`);
   });
 }
 
-startServer().catch((err) => {
+startServer().catch(err => {
   console.error('❌ Failed to start server:', err);
   process.exit(1);
 });
