@@ -25,7 +25,12 @@ if (!OPENWEATHER_KEY) {
   process.exit(1);
 }
 
-app.use(cors());
+const FRONTEND_URL = process.env.FRONTEND_URL;
+if (FRONTEND_URL) {
+  app.use(cors({ origin: FRONTEND_URL }));
+} else {
+  app.use(cors());
+}
 app.use(express.json());
 
 // In‑memory cache for insights

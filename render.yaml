@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: caelus-intelligence-layer
+    env: node
+    region: ohio
+    plan: free
+    rootDir: server
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: caelus-db
+          property: connectionString
+      - key: OPENWEATHER_KEY
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+
+databases:
+  - name: caelus-db
+    plan: free
+    databaseName: caelus
+    user: caelus
+    region: ohio

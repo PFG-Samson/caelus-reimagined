@@ -1,55 +1,111 @@
-# Welcome CAELUS
+# CAELUS Reimagined
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+Welcome to **CAELUS Reimagined** - a next-generation interactive meteorological and geospatial intelligence platform. CAELUS provides real-time situational awareness by aggregating global weather signals, evaluating localized risk rules via a sophisticated rule-engine, and presenting insights through both 2D mapping and high-fidelity 3D Globe visualization.
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+![CAELUS Intelligence](/assets/preview.png) *(Note: Placeholder for actual screenshot)*
 
-Follow these steps:
+## 🌟 Key Features
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+### 📡 Intelligence Layer Backend (Node.js & Express)
+*   **Unified Insights API**: Aggregates current weather, 5-day forecasts, and air pollution metrics in parallel using an optimized caching system (5-min TTL).
+*   **Geospatial Rule Engine**: Uses PostGIS and Prisma to match locations to defined geographic zones (e.g., airports, industrial sectors).
+*   **Dynamic Risk Evaluation**: Evaluates incoming weather signals against both global and zone-specific thresholds (e.g., generating a "Critical" alert if temperature > 35°C in an airport zone).
+*   **Robust Input Validation**: Strict payload validation and sanitization using Zod.
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+### 🗺️ Interactive Frontend (React, Vite, Tailwind CSS)
+*   **3D Globe (CesiumJS)**: Fully interactive 3D representation of the Earth with real-time weather overlays and zone highlighting.
+*   **2D Map (Leaflet)**: Smooth, tactical 2D mapping interface for focused operations.
+*   **Intelligence Summary Panel**: Glassmorphic, highly responsive UI element displaying dynamic status alerts, micro-progress bars for current weather signals (AQI, Temperature, Wind), and an intuitive hourly/daily forecast timeline.
 
-# Step 3: Install the necessary dependencies.
-npm i
+---
 
-# Step 4: Create a .env file with required API keys (see below)
+## 🛠️ Technology Stack
 
-# Step 5: Start the development server with auto-reloading and an instant preview.
+**Frontend:**
+*   React 18 & Vite
+*   TypeScript
+*   Tailwind CSS & shadcn/ui (Glassmorphism aesthetics)
+*   CesiumJS (3D Globe) & React-Leaflet (2D Maps)
+*   React Query & Zustand (State Management)
+
+**Backend:**
+*   Node.js & Express
+*   TypeScript
+*   Prisma ORM & PostgreSQL (with PostGIS extension)
+*   Zod (Schema Validation)
+*   Axios & OpenWeatherMap API
+
+---
+
+## 🚀 Getting Started
+
+### Prerequisites
+*   Node.js (v18+ recommended)
+*   PostgreSQL with the PostGIS extension installed and running.
+
+### 1. Environment Configuration
+
+Create a `.env` file in the root of the project with the following keys:
+
+```bash
+# ----- BACKEND CONFIG -----
+# OpenWeather API Key (Used by backend proxy)
+OPENWEATHER_KEY=your_openweather_api_key
+
+# Database connection string (Must support PostGIS)
+DATABASE_URL="postgresql://user:password@localhost:5432/caelus?schema=public"
+
+# Backend Port
+PORT=3001
+
+# ----- FRONTEND CONFIG -----
+# Cesium Ion Token for 3D globe tiles
+VITE_CESIUM_TOKEN=your_cesium_ion_token
+
+# (Optional) NASA satellite imagery
+VITE_GIBS_API_KEY=your_nasa_gibs_key
+```
+
+### 2. Database Setup
+
+Navigate to the `server` directory and initialize the database schema:
+
+```bash
+cd server
+npm install
+npx prisma generate
+npx prisma db push
+```
+
+*Note: The backend will automatically seed default rules and geographic zones on its first startup.*
+
+### 3. Running the Application
+
+You can start both the backend and frontend development servers concurrently:
+
+```bash
+# In the server directory:
+npm run dev
+
+# In a new terminal, from the project root:
+npm install
 npm run dev
 ```
 
-## Environment Variables
+The frontend will be available at `http://localhost:8080` (or `8081`), and the backend API will be available at `http://localhost:3001`.
 
-Create a `.env` file in the project root with the following API keys:
+---
 
-```bash
-# Required for weather data
-VITE_OPENWEATHER_KEY=your_openweather_api_key
+## 🏗️ Architecture Overview
 
-# Required for 3D globe functionality
-VITE_CESIUM_TOKEN=your_cesium_ion_token
+The application follows a decoupled client-server architecture:
 
-# Optional: For NASA satellite imagery
-VITE_GIBS_API_KEY=your_nasa_gibs_key
+1.  **Client:** The React frontend makes requests to the backend for insights and zones. It handles the heavy lifting of rendering 3D/2D maps and the responsive UI panels.
+2.  **API Gateway:** The `server/src/index.ts` acts as an Express gateway.
+3.  **Data Fetching & Caching:** The `/api/insights` endpoint orchestrates requests to the OpenWeatherMap API and caches the results to minimize latency and API costs.
+4.  **Spatial Engine:** The backend queries the PostGIS database to find intersections between the requested coordinates and defined operational zones.
+5.  **Evaluator:** The `evaluate()` function processes the raw weather signals against the database rules to generate actionable alerts.
 
-# AI Weather Summaries (choose one or both)
-VITE_OPENAI_KEY=your_openai_api_key
-VITE_OPENAI_MODEL=gpt-3.5-turbo
-# OR
-VITE_HUGGINGFACE_KEY=your_huggingface_api_key
-VITE_HUGGINGFACE_MODEL=microsoft/DialoGPT-medium
-```
+## 📄 License
 
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+This project is licensed under the MIT License.
