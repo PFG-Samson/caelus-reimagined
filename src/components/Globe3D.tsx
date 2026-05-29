@@ -24,8 +24,7 @@ import IntelligencePanel from './IntelligencePanel';
 // Cesium Ion access token
 Cesium.Ion.defaultAccessToken = import.meta.env.VITE_CESIUM_TOKEN;
 
-// API key is now managed by the Intelligence Layer backend
-
+const API_BASE = import.meta.env.VITE_API_URL || "";
 const weatherCache = new Map<string, { timestamp: number; payload: any }>();
 const CACHE_TTL_MS = 1000 * 60 * 5;
 
@@ -215,13 +214,13 @@ const Globe3D = forwardRef<Globe3DRef, Globe3DProps>(
       const dateStr = currentDate.toISOString().split("T")[0];
 
       const owmMap: Record<string, string> = {
-        temperature: `/api/tiles/temp_new/{z}/{x}/{y}`,
-        precipitation: `/api/tiles/precipitation_new/{z}/{x}/{y}`,
-        wind: `/api/tiles/wind_new/{z}/{x}/{y}`,
-        pressure: `/api/tiles/pressure_new/{z}/{x}/{y}`,
-        clouds: `/api/tiles/clouds_new/{z}/{x}/{y}`,
-        snow: `/api/tiles/snow_new/{z}/{x}/{y}`,
-        wind_gust: `/api/tiles/wind_gust/{z}/{x}/{y}`,
+        temperature: `${API_BASE}/api/tiles/temp_new/{z}/{x}/{y}`,
+        precipitation: `${API_BASE}/api/tiles/precipitation_new/{z}/{x}/{y}`,
+        wind: `${API_BASE}/api/tiles/wind_new/{z}/{x}/{y}`,
+        pressure: `${API_BASE}/api/tiles/pressure_new/{z}/{x}/{y}`,
+        clouds: `${API_BASE}/api/tiles/clouds_new/{z}/{x}/{y}`,
+        snow: `${API_BASE}/api/tiles/snow_new/{z}/{x}/{y}`,
+        wind_gust: `${API_BASE}/api/tiles/wind_gust/{z}/{x}/{y}`,
 
         // Add GIBS layers support
         modis: gibUrl("MODIS_Terra_CorrectedReflectance_TrueColor", dateStr),

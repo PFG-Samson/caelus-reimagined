@@ -67,6 +67,7 @@ export interface WeatherMapRef {
   zoomOut: () => void;
 }
 
+const API_BASE = import.meta.env.VITE_API_URL || "";
 const GIBS_API_KEY = import.meta.env.VITE_GIBS_API_KEY;
 // API key is now managed by the Intelligence Layer backend
 const weatherCache = new Map<string, { timestamp: number; payload: any }>();
@@ -360,13 +361,13 @@ const WeatherMap = forwardRef<WeatherMapRef, WeatherMapProps>(
 
       // map of OWM key names -> url template
       const owmMap: Record<string, string> = {
-        temperature: `/api/tiles/temp_new/{z}/{x}/{y}`,
-        precipitation: `/api/tiles/precipitation_new/{z}/{x}/{y}`,
-        wind: `/api/tiles/wind_new/{z}/{x}/{y}`,
-        pressure: `/api/tiles/pressure_new/{z}/{x}/{y}`,
-        clouds: `/api/tiles/clouds_new/{z}/{x}/{y}`,
-        snow: `/api/tiles/snow_new/{z}/{x}/{y}`,
-        wind_gust: `/api/tiles/wind_gust/{z}/{x}/{y}`,
+        temperature: `${API_BASE}/api/tiles/temp_new/{z}/{x}/{y}`,
+        precipitation: `${API_BASE}/api/tiles/precipitation_new/{z}/{x}/{y}`,
+        wind: `${API_BASE}/api/tiles/wind_new/{z}/{x}/{y}`,
+        pressure: `${API_BASE}/api/tiles/pressure_new/{z}/{x}/{y}`,
+        clouds: `${API_BASE}/api/tiles/clouds_new/{z}/{x}/{y}`,
+        snow: `${API_BASE}/api/tiles/snow_new/{z}/{x}/{y}`,
+        wind_gust: `${API_BASE}/api/tiles/wind_gust/{z}/{x}/{y}`,
       };
 
       if (owmSupported.has(layerId) && owmMap[layerId]) {
