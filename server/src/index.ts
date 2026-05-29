@@ -10,7 +10,7 @@ import { ensurePostGIS, findZonesContainingPoint } from './engine/spatial';
 import { defaultZones } from './engine/defaultZones';
 import rulesRouter from './routes/rules';
 import zonesRouter from './routes/zones';
-import { PrismaClient } from './generated/prisma';
+import { PrismaClient } from '@prisma/client';
 import type { RiskRule, ZoneSummary } from './engine/types';
 
 dotenv.config();
