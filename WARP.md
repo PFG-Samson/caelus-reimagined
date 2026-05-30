@@ -53,6 +53,7 @@ The application centers around a sophisticated dual-view system managed in `src/
 ### Environment Variables
 Required API keys (create `.env` file):
 ```
+VITE_API_URL=https://caelus-intelligence-layer.onrender.com
 VITE_OPENWEATHER_KEY=your_openweather_api_key
 VITE_CESIUM_TOKEN=your_cesium_ion_token
 VITE_GIBS_API_KEY=your_nasa_gibs_key (optional)
@@ -142,10 +143,12 @@ VITE_OPENAI_MODEL=gpt-3.5-turbo (optional)
 - Add corresponding UI controls in `LayerSelector.tsx`
 - Ensure consistent naming across 2D and 3D implementations
 
-### API Integration
-- All weather APIs use caching with 5-minute TTL
-- Error handling includes fallback mechanisms
-- Rate limiting considerations for tile services
+### API Integration & Decoupled Routing
+- **Reverse Proxy Routing:** In production (Vercel), API requests under `/api/*` are reverse-proxied using Vercel's edge redirects in `vercel.json` directly to the live Render backend: `https://caelus-intelligence-layer.onrender.com/api/*`.
+- **CORS Mitigation:** Reverse proxy routes prevent CORS issues by keeping all browser network traffic directed relative to the frontend domain.
+- **Client Backend Configuration:** Set `VITE_API_URL` to the live Render URL in local `.env` so you do not need to run a local backend or database.
+- **API Cache & TTL:** All backend-proxied weather and geospatial queries have a 5-minute cache TTL with OpenWeatherMap backend proxies.
+- **Error Handling:** Backend serves structured error responses with fallback data in case weather/insights endpoints experience failures.
 
 ### Performance Considerations
 - Weather data caching prevents redundant API calls

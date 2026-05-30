@@ -59,6 +59,9 @@ DATABASE_URL="postgresql://user:password@localhost:5432/caelus?schema=public"
 PORT=3001
 
 # ----- FRONTEND CONFIG -----
+# API Base URL (Point to live Render server in production/local development)
+VITE_API_URL=https://caelus-intelligence-layer.onrender.com
+
 # Cesium Ion Token for 3D globe tiles
 VITE_CESIUM_TOKEN=your_cesium_ion_token
 
@@ -105,6 +108,23 @@ The application follows a decoupled client-server architecture:
 3.  **Data Fetching & Caching:** The `/api/insights` endpoint orchestrates requests to the OpenWeatherMap API and caches the results to minimize latency and API costs.
 4.  **Spatial Engine:** The backend queries the PostGIS database to find intersections between the requested coordinates and defined operational zones.
 5.  **Evaluator:** The `evaluate()` function processes the raw weather signals against the database rules to generate actionable alerts.
+
+---
+
+## 🌐 Production Deployment
+
+The project is deployed in a fully decoupled multi-cloud configuration:
+
+### 1. Frontend: Vercel SPA (`https://pfcaelus.vercel.app`)
+*   **Hosting:** Hosted as a high-performance static React Single Page Application on Vercel's Edge Network.
+*   **Reverse Proxy (`vercel.json`):** Any relative query starting with `/api` is reverse-proxied by Vercel server-side to the Render backend, preventing CORS preflight issues and keeping all traffic secure and uniform.
+*   **SPA Routing Fallback:** Non-API routes are rewritten to `/index.html` to avoid `404` errors when refreshing routes in the browser.
+
+### 2. Backend: Render Intelligence Layer (`https://caelus-intelligence-layer.onrender.com`)
+*   **Hosting:** Express & PostGIS server deployed as a Render Web Service.
+*   **Database:** A Neon Serverless PostgreSQL instance running PostGIS v3.5, managed via Prisma ORM.
+
+---
 
 ## 📄 License
 

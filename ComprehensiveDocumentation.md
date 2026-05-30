@@ -89,6 +89,7 @@ Public safety/emergency, aviation/maritime ops, field services, energy/utilities
 
 **Environment Variables:**
 ```env
+VITE_API_URL=https://caelus-intelligence-layer.onrender.com
 VITE_OPENWEATHER_KEY=your_openweather_api_key
 VITE_CESIUM_TOKEN=your_cesium_ion_token
 VITE_GIBS_API_KEY=optional
@@ -179,15 +180,18 @@ npm run dev
 
 ## 6. Deployment & Maintenance
 
-**Hosting:**
+**Hosting & Decoupled Architecture:**
 
-* Built with Vite — deploy to Netlify, Vercel, S3+CloudFront, etc.
-* Cesium assets handled via `vite-plugin-cesium`
+* **Frontend:** Deployed on **Vercel** (`https://pfcaelus.vercel.app`) as a static SPA.
+  * Powered by `vercel.json` rewrites to reverse-proxy `/api/*` traffic transparently to the live backend, avoiding CORS and ensuring solid routing fallbacks for single-page components.
+* **Backend:** Deployed on **Render** (`https://caelus-intelligence-layer.onrender.com`) as a Node.js Express server.
+  * Connected via Prisma to a serverless Neon PostgreSQL database running PostGIS v3.5.
+* Cesium assets handled via `vite-plugin-cesium`.
 
 **Environment Management:**
 
-* Use `VITE_` vars for public keys only
-* For AI keys, use a backend proxy
+* Use `VITE_API_URL` to route requests to the live Render backend.
+* Use `.env` files locally to store credentials and tokens for both frontend and backend scripts.
 
 **Observability:**
 
