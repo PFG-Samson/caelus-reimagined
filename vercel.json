@@ -5,10 +5,7 @@
       "destination": "https://caelus-intelligence-layer.onrender.com/api/:path*"
     },
     {
-      "handle": "filesystem"
-    },
-    {
-      "source": "/(.*)",
+      "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
   ]
